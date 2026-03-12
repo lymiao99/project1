@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card">
+    <h1>設備故障即時預測</h1>
+    <p style="color: var(--text-muted); margin-bottom: 30px;">輸入設備運作參數，AI 將即時評估機器故障風險。</p>
+
+    <form id="predictForm">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>產品類型<br>(Type)</label>
+                <select name="type">
+                    <option value="L">L (Low)</option>
+                    <option value="M" selected>M (Medium)</option>
+                    <option value="H">H (High)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>環境溫度 [K]<br>(Air Temperature)</label>
+                <input type="number" step="0.1" name="air_temp" value="298.1" required>
+            </div>
+            <div class="form-group">
+                <label>製程溫度 [K]<br>(Process Temperature)</label>
+                <input type="number" step="0.1" name="process_temp" value="308.6" required>
+            </div>
+            <div class="form-group">
+                <label>旋轉轉速 [rpm]<br>(Rotational Speed)</label>
+                <input type="number" name="rot_speed" value="1500" required>
+            </div>
+            <div class="form-group">
+                <label>扭矩 [Nm]<br>(Torque)</label>
+                <input type="number" step="0.1" name="torque" value="40.0" required>
+            </div>
+            <div class="form-group">
+                <label>工具磨損 [min]<br>(Tool Wear)</label>
+                <input type="number" name="tool_wear" value="0" required>
+            </div>
+        </div>
+        <button type="submit" id="submitBtn">開始分析設備健康度</button>
+    </form>
+
+    <div id="resultModal">
+        <h2 id="resTitle">分析結果</h2>
+        <div class="result-row">
+            <div class="result-item">
+                <label>狀態判斷</label>
+                <div id="resBadge" class="status-badge"></div>
+            </div>
+            <div class="result-item">
+                <label>預測準確度</label>
+                <div class="res-value"><span id="resConfidence"></span>%</div>
+            </div>
+            <div class="result-item">
+                <label>建議行動</label>
+                <div id="resRecommendation" class="res-value"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('predictForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.innerText = '分析中...';
+        btn.disabled = true;
+
+        const formData = new FormData(e.target);
+        const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+
+        btn.innerText = '開始分析設備健康度';
+        btn.disabled = false;
+
+        if (result.success) {
+            const modal = document.getElementById('resultModal');
+            const badge = document.getElementById('resBadge');
+            modal.style.display = 'block';
+
+            badge.innerText = result.risk_level;
+            badge.className = result.prediction === 1 ? 'status-badge status-danger' : 'status-badge status-normal';
+
+            document.getElementById('resConfidence').innerText = result.confidence;
+            document.getElementById('resRecommendation').innerText = result.recommendation;
+
+            modal.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            alert('錯誤: ' + result.error);
+        }
+    };
+</script>
+{% endblock %}

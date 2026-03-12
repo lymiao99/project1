@@ -1,0 +1,23 @@
+{
+    "logistic_regression": {
+        "accuracy": 96.78,
+        "precision": 100.0,
+        "recall": 2.27,
+        "algorithm": "Logistic Regression",
+        "summary": "傳統的統計模型，具有極佳的解釋性，適合分析單一參數對故障的影響權重。"
+    },
+    "random_forest": {
+        "accuracy": 97.62,
+        "precision": 91.11,
+        "recall": 31.06,
+        "algorithm": "Random Forest",
+        "summary": "由多棵決策樹構成的集成模型，擅長處理非線性特徵互動（如溫度與轉速的複合影響）。"
+    },
+    "xgboost": {
+        "accuracy": 97.55,
+        "precision": 86.96,
+        "recall": 30.3,
+        "algorithm": "Xgboost",
+        "summary": "基於梯度提升的先進算法，目前結構化數據預測效能最強的模型，能捕捉極微小的數據異常。"
+    }
+}

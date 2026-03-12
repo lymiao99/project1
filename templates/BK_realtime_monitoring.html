@@ -1,0 +1,318 @@
+﻿{% extends "layout.html" %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <div>
+            <h1>閮剖??葫?典?皜?(Real-time)</h1>
+            <p id="systemMode" style="color: var(--text-muted); font-size: 0.9rem;">?桀????<span id="modeText"
+                    style="color: #10b981; font-weight: bold;">?芸??菜葫銝?/span></p>
+        </div>
+        <div id="connectionStatus" style="display: flex; flex-direction: column; align-items: flex-end;">
+            <div style="color: #10b981; font-size: 0.9rem;">??鞈?銝脫?銝?(璅⊥)</div>
+            <button id="resumeBtn"
+                style="display: none; width: auto; padding: 8px 20px; margin-top: 10px; background: #10b981;">蝜潛??菜葫</button>
+        </div>
+    </div>
+
+    <!-- ?單?????-->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">?嗅??啣?皞怠漲 [K]</div>
+            <div id="val-temp" class="stat-value">--</div>
+            <div id="val-temp-avg" style="font-size: 0.8rem; color: var(--text-muted);">MA(5): --</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">??頧?[rpm]</div>
+            <div id="val-speed" class="stat-value">--</div>
+            <div id="val-oscillation" style="font-size: 0.8rem; color: var(--text-muted);">??? --</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">?葫??蝯?</div>
+            <div id="val-prediction" class="status-badge" style="margin-top: 5px;">蝑??豢?...</div>
+            <div id="val-confidence" style="font-size: 0.8rem; color: var(--text-muted);">靽∪?摨? --%</div>
+        </div>
+    </div>
+
+    <!-- ???”? -->
+    <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+        <div class="card" style="padding: 15px; background: rgba(0,0,0,0.2);">
+            <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-muted);">皞怠漲頞典 (?嗅? vs 蝘餃?撟喳?)</h3>
+            <div class="chart-container">
+                <canvas id="tempChart"></canvas>
+            </div>
+        </div>
+        <div class="card" style="padding: 15px; background: rgba(0,0,0,0.2);">
+            <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-muted);">頧??芰??(璅?撌株隅??</h3>
+            <div class="chart-container">
+                <canvas id="oscChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ?啣虜敶撘?蝒?(Modal) -->
+    <div id="anomalyModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="text-align: center; margin-bottom: 25px;">
+                <div
+                    style="background: rgba(239, 68, 68, 0.1); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+                    <span style="color: #ef4444; font-size: 2rem;">??</span>
+                </div>
+                <h2 style="color: #ef4444; margin-bottom: 5px;">?菜葫?啗身??雿撣賂?</h2>
+                <p style="color: #94a3b8;">蝟餌絞撌脰??皜穿?隢炎?乩誑銝?皜砍閰單???/p>
+            </div>
+
+            <div id="abnormalDetailsModal"
+                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 25px;">
+                <!-- ??JS ??憛怠? -->
+            </div>
+
+            <div style="background: rgba(239, 68, 68, 0.2); padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                <p style="color: #fca5a5; font-size: 1.1rem; line-height: 1.6; margin: 0;">
+                    <strong style="color: #ef4444; font-size: 1.2rem;">? 撠振撱箄降嚗?/strong> ?豢?憿舐內頞典?風?脣皞?蝚艾遣霅啁??喲脰??曉?⊥?銝行炎?亙極?瑞ㄗ????                </p>
+            </div>
+
+            <button id="modalResumeBtn" class="btn-primary"
+                style="width: 100%; padding: 12px; font-weight: bold; background: #10b981;">
+                蝣箏?銝衣匱蝥皜?            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        }
+
+        70% {
+            transform: scale(1.01);
+            box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+        }
+
+        100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+    }
+
+    /* Modal 敶?璅?? */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(8px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: #1e293b;
+        border: 2px solid #ef4444;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 650px;
+        padding: 30px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+
+<script>
+    const ctxTemp = document.getElementById('tempChart').getContext('2d');
+    const ctxOsc = document.getElementById('oscChart').getContext('2d');
+
+    const maxPoints = 20;
+    const labels = [];
+    const tempData = [];
+    const tempAvgData = [];
+    const oscData = [];
+
+    let isPaused = false;
+    const resumeBtn = document.getElementById('resumeBtn');
+    const alertBox = document.getElementById('alertBox');
+    const modeText = document.getElementById('modeText');
+
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+            x: { grid: { display: false }, ticks: { display: false } }
+        },
+        plugins: { legend: { labels: { color: '#f8fafc' } } },
+        animation: { duration: 0 }
+    };
+
+    const tempChart = new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '?啣?皞怠漲',
+                    data: tempData,
+                    borderColor: '#6366f1',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0
+                },
+                {
+                    label: 'MA(5) Avg',
+                    data: tempAvgData,
+                    borderColor: '#10b981',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.4,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: commonOptions
+    });
+
+    const oscChart = new Chart(ctxOsc, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '頧?皞榆 (???',
+                data: oscData,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                fill: true,
+                borderWidth: 2,
+                tension: 0.4,
+                pointRadius: 0
+            }]
+        },
+        options: commonOptions
+    });
+
+    document.getElementById('modalResumeBtn').onclick = () => {
+        isPaused = false;
+        document.getElementById('anomalyModal').style.display = 'none';
+        modeText.innerText = 'Live monitoring';
+        modeText.style.color = '#10b981';
+        updateLoop();
+    };
+
+    async function updateData() {
+        if (isPaused) return;
+
+        try {
+            const response = await fetch('/api/sensor-stream');
+            const result = await response.json();
+
+            if (result.success) {
+                const d = result.data;
+
+                // ?湔?詨?憿舐內
+                document.getElementById('val-temp').innerText = d.air_temp + ' K';
+                document.getElementById('val-temp-avg').innerText = 'MA(5): ' + d.air_temp_avg + ' K';
+                document.getElementById('val-speed').innerText = d.rot_speed + ' rpm';
+                document.getElementById('val-oscillation').innerText = '??? ' + d.rot_oscillation;
+
+                // ?湔?葫憿舐內
+                const badge = document.getElementById('val-prediction');
+                const confidence = document.getElementById('val-confidence');
+
+                if (result.prediction == 1) {
+                    console.log("Anomaly detected! Data:", d);
+                    isPaused = true;
+
+                    // 憿舐內 Modal 敶?
+                    const modal = document.getElementById('anomalyModal');
+                    const detailsDiv = document.getElementById('abnormalDetailsModal');
+                    detailsDiv.innerHTML = '';
+
+                    const fieldLabels = {
+                        'udi': '蝝????(UDI)',
+                        'type': '?Ｗ?? (Type)',
+                        'air_temp': '?啣?皞怠漲 (Air)',
+                        'process_temp': '鋆賜?皞怠漲 (Proc)',
+                        'rot_speed': '??頧?(RPM)',
+                        'torque': '?剖??詨?(Torque)',
+                        'tool_wear': '撌亙蝤冽? (Wear)',
+                        'air_temp_avg': '皞怠漲撟喳? (MA5)',
+                        'rot_oscillation': '頧???(Osc)'
+                    };
+
+                    for (const key in fieldLabels) {
+                        const label = fieldLabels[key];
+                        const val = d[key] !== undefined ? d[key] : 'N/A';
+
+                        const item = document.createElement('div');
+                        item.className = 'stat-card';
+                        item.style.padding = '12px';
+                        item.style.background = 'rgba(255,255,255,0.05)';
+                        item.style.border = '1px solid rgba(255,255,255,0.1)';
+                        item.innerHTML = `
+                            <div style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 6px;">${label}</div>
+                            <div style="color: #f8fafc; font-weight: 600; font-size: 1.1rem;">${val}</div>
+                        `;
+                        detailsDiv.appendChild(item);
+                    }
+
+                    modal.style.display = 'flex';
+                    badge.innerText = '?? ?啣虜??';
+                    badge.className = 'status-badge status-danger';
+                    modeText.innerText = 'Anomaly detected (paused)';
+                    modeText.style.color = '#ef4444';
+
+                } else {
+                    badge.innerText = '????甇?虜';
+                    badge.className = 'status-badge status-normal';
+                }
+                confidence.innerText = '靽∪?摨? ' + result.confidence + '%';
+
+                // ?湔?”
+                if (labels.length >= maxPoints) {
+                    labels.shift();
+                    tempData.shift();
+                    tempAvgData.shift();
+                    oscData.shift();
+                }
+
+                const now = new Date().toLocaleTimeString();
+                labels.push(now);
+                tempData.push(d.air_temp);
+                tempAvgData.push(d.air_temp_avg);
+                oscData.push(d.rot_oscillation);
+
+                tempChart.update();
+                oscChart.update();
+            }
+        } catch (error) {
+            console.error('Data fetch error:', error);
+        }
+    }
+
+    function updateLoop() {
+        if (!isPaused) {
+            updateData();
+            setTimeout(updateLoop, 1000);
+        }
+    }
+
+    updateLoop();
+</script>
+{% endblock %}

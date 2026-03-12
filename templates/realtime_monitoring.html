@@ -1,0 +1,1098 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="dashboard-shell">
+    <!-- 頁首 -->
+    <div class="page-header">
+        <div>
+            <h1>智慧工廠設備感測器即時監測系統</h1>
+            <div class="subline">
+                <span>系統狀態：</span>
+                <span id="modeText" class="mode-live">即時監測中</span>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <div id="connectionStatus" class="connection-pill online">資料串流連線正常（1 秒更新）</div>
+            <button id="resumeBtn" class="btn-primary" style="display:none;">恢復監測</button>
+        </div>
+    </div>
+
+
+
+    <!-- 即時指標 -->
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">空氣溫度</div>
+            <div id="val-air-temp" class="metric-value">--</div>
+            <div id="val-air-temp-avg" class="metric-sub">MA(5)：--</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">製程溫度</div>
+            <div id="val-process-temp" class="metric-value">--</div>
+            <div class="metric-sub">即時製程溫度</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">主軸轉速</div>
+            <div id="val-speed" class="metric-value">--</div>
+            <div id="val-oscillation" class="metric-sub">震盪值：--</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">扭力</div>
+            <div id="val-torque" class="metric-value">--</div>
+            <div class="metric-sub">扭力負載監測</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">工具磨損</div>
+            <div id="val-tool-wear" class="metric-value">--</div>
+            <div class="metric-sub">工具使用狀態</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-label">設備狀態判斷</div>
+            <div id="val-prediction" class="status-badge status-normal" style="margin-top: 6px;">模型分析中...</div>
+            <div id="predictionHint" class="metric-sub">等待模型結果</div>
+        </div>
+    </div>
+
+    <!-- 圖表 -->
+    <div class="charts-grid">
+        <div class="panel chart-panel">
+            <div class="chart-head">
+                <div>
+                    <div class="panel-title">溫度趨勢監測</div>
+                    <div class="panel-desc">空氣溫度、製程溫度與移動平均</div>
+                </div>
+            </div>
+            <div class="chart-container large">
+                <canvas id="tempChart"></canvas>
+            </div>
+        </div>
+
+        <div class="panel chart-panel">
+            <div class="chart-head">
+                <div>
+                    <div class="panel-title">主軸轉速與震盪監測</div>
+                    <div class="panel-desc">轉速變化與震盪值趨勢</div>
+                </div>
+            </div>
+            <div class="chart-container large">
+                <canvas id="oscChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 系統說明 -->
+    <div class="info-grid">
+        <div class="panel">
+            <div class="panel-title">監測判斷規則</div>
+            <div class="info-list">
+                <div class="info-item">溫度警戒線：空氣溫度 305 K、製程溫度 315 K</div>
+                <div class="info-item">震盪警戒線：轉速震盪值 12</div>
+                <div class="info-item">健康分數依溫度、震盪、磨耗與模型結果綜合估算</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">系統建議</div>
+            <div id="systemAdvice" class="advice-box">
+                目前系統待資料輸入，將於收到感測資料後自動更新判斷建議。
+            </div>
+        </div>
+    </div>
+
+    <!-- 異常警示視窗 -->
+    <div id="anomalyModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-top">
+                <div class="modal-icon">⚠️</div>
+                <div>
+                    <h2>偵測到設備異常狀態</h2>
+                    <p>系統偵測到設備運行異常，資料更新已暫停。請立即檢查設備運作狀態並進行必要處理。</p>
+                </div>
+            </div>
+
+            <div id="abnormalDetailsModal" class="modal-grid">
+                <!-- 由 JS 動態填入 -->
+            </div>
+
+            <div class="modal-warning-box">
+                <strong>建議檢查項目：</strong>
+                請優先檢查設備溫度、主軸轉速、扭力與刀具磨耗狀態，並確認是否存在持續性震動或過熱情況。如有異常請立即停機並通知維護人員處理。
+            </div>
+
+            <button id="modalResumeBtn" class="btn-primary full">確認並恢復監測</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --bg-1: #0f172a;
+        --bg-2: #111827;
+        --panel: rgba(15, 23, 42, 0.72);
+        --panel-border: rgba(148, 163, 184, 0.12);
+        --text-main: #f8fafc;
+        --text-soft: #cbd5e1;
+        --text-muted: #94a3b8;
+        --green: #10b981;
+        --yellow: #f59e0b;
+        --red: #ef4444;
+        --blue: #60a5fa;
+        --violet: #818cf8;
+    }
+
+    .dashboard-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .page-header,
+    .overview-grid,
+    .metrics-grid,
+    .charts-grid,
+    .info-grid {
+        width: 100%;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 22px 24px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.96));
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
+    }
+
+    .page-header h1 {
+        margin: 0 0 8px 0;
+        font-size: 1.9rem;
+        letter-spacing: 0.5px;
+        color: var(--text-main);
+    }
+
+    .subline {
+        color: var(--text-soft);
+        font-size: 0.95rem;
+    }
+
+    .mode-live {
+        color: var(--green);
+        font-weight: 700;
+    }
+
+    .mode-warning {
+        color: var(--yellow);
+        font-weight: 700;
+    }
+
+    .mode-danger {
+        color: var(--red);
+        font-weight: 700;
+    }
+
+    .header-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+    }
+
+    .connection-pill {
+        padding: 10px 14px;
+        border-radius: 999px;
+        font-size: 0.9rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .connection-pill.online {
+        color: #a7f3d0;
+        background: rgba(16, 185, 129, 0.12);
+        border-color: rgba(16, 185, 129, 0.28);
+    }
+
+    .connection-pill.offline {
+        color: #fecaca;
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.28);
+    }
+
+    .btn-primary {
+        border: none;
+        border-radius: 12px;
+        padding: 10px 18px;
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+        background: linear-gradient(135deg, #10b981, #059669);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 10px 20px rgba(16, 185, 129, 0.18);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-1px);
+    }
+
+    .btn-primary.full {
+        width: 100%;
+        padding: 13px 18px;
+        font-size: 1rem;
+    }
+
+    .overview-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1fr;
+        gap: 16px;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 16px;
+    }
+
+    .charts-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .panel,
+    .metric-card {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
+        backdrop-filter: blur(10px);
+    }
+
+    .panel-title,
+    .metric-label {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 12px;
+        letter-spacing: 0.3px;
+    }
+
+    .panel-desc {
+        color: var(--text-muted);
+        font-size: 0.84rem;
+        margin-top: 4px;
+    }
+
+    .status-main {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 8px;
+    }
+
+    .status-light-wrap {
+        min-width: 66px;
+        display: flex;
+        justify-content: center;
+    }
+
+    .status-light {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        position: relative;
+        box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
+    }
+
+    .status-light::after {
+        content: "";
+        position: absolute;
+        inset: -7px;
+        border-radius: 50%;
+        opacity: 0.25;
+    }
+
+    .status-light.normal,
+    .legend-dot.normal {
+        background: var(--green);
+    }
+
+    .status-light.normal::after {
+        background: var(--green);
+    }
+
+    .status-light.warning,
+    .legend-dot.warning {
+        background: var(--yellow);
+    }
+
+    .status-light.warning::after {
+        background: var(--yellow);
+    }
+
+    .status-light.danger,
+    .legend-dot.danger {
+        background: var(--red);
+    }
+
+    .status-light.danger::after {
+        background: var(--red);
+    }
+
+    .status-text {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: var(--text-main);
+        margin-bottom: 6px;
+    }
+
+    .status-subtext {
+        color: var(--text-muted);
+        line-height: 1.55;
+        font-size: 0.92rem;
+    }
+
+    .status-legend {
+        display: flex;
+        gap: 18px;
+        margin-top: 18px;
+        color: var(--text-soft);
+        font-size: 0.9rem;
+        flex-wrap: wrap;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .score-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+    }
+
+    .score-ring {
+        position: relative;
+        width: 140px;
+        height: 140px;
+        flex-shrink: 0;
+    }
+
+    .score-ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+    }
+
+    .ring-bg,
+    .ring-progress {
+        fill: none;
+        stroke-width: 10;
+    }
+
+    .ring-bg {
+        stroke: rgba(255, 255, 255, 0.08);
+    }
+
+    .ring-progress {
+        stroke: #10b981;
+        stroke-linecap: round;
+        stroke-dasharray: 301.59;
+        stroke-dashoffset: 301.59;
+        transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;
+    }
+
+    .score-center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        pointer-events: none;
+    }
+
+    .score-value {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text-main);
+        line-height: 1;
+    }
+
+    .score-label {
+        margin-top: 6px;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .score-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        flex: 1;
+    }
+
+    .mini-metric {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .mini-label {
+        font-size: 0.84rem;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .mini-value {
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .risk-bar-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .risk-scale {
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+    }
+
+    .risk-bar {
+        height: 16px;
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.25), rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .risk-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+        transition: width 0.35s ease;
+    }
+
+    .risk-hint {
+        color: var(--text-soft);
+        font-size: 0.92rem;
+        line-height: 1.55;
+        min-height: 48px;
+    }
+
+    .metric-value {
+        font-size: 1.9rem;
+        color: var(--text-main);
+        font-weight: 800;
+        margin-bottom: 10px;
+        line-height: 1.1;
+    }
+
+    .metric-sub {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.92rem;
+        font-weight: 800;
+        width: fit-content;
+    }
+
+    .status-normal {
+        color: #a7f3d0;
+        background: rgba(16, 185, 129, 0.14);
+        border: 1px solid rgba(16, 185, 129, 0.24);
+    }
+
+    .status-warning {
+        color: #fde68a;
+        background: rgba(245, 158, 11, 0.14);
+        border: 1px solid rgba(245, 158, 11, 0.24);
+    }
+
+    .status-danger {
+        color: #fecaca;
+        background: rgba(239, 68, 68, 0.14);
+        border: 1px solid rgba(239, 68, 68, 0.24);
+    }
+
+    .chart-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .chart-container {
+        position: relative;
+        width: 100%;
+    }
+
+    .chart-container.large {
+        height: 320px;
+    }
+
+    .info-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .info-item {
+        color: var(--text-soft);
+        background: rgba(255, 255, 255, 0.04);
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        line-height: 1.5;
+    }
+
+    .advice-box {
+        color: var(--text-soft);
+        line-height: 1.7;
+        background: rgba(96, 165, 250, 0.08);
+        border: 1px solid rgba(96, 165, 250, 0.16);
+        padding: 16px;
+        border-radius: 14px;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.78);
+        backdrop-filter: blur(8px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        padding: 24px;
+    }
+
+    .modal-content {
+        width: min(760px, 100%);
+        background: linear-gradient(180deg, #111827, #0f172a);
+        border: 1px solid rgba(239, 68, 68, 0.28);
+        border-radius: 20px;
+        padding: 26px;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+        animation: slideUp 0.25s ease-out;
+    }
+
+    .modal-top {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 22px;
+    }
+
+    .modal-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(239, 68, 68, 0.12);
+        font-size: 1.8rem;
+        flex-shrink: 0;
+    }
+
+    .modal-top h2 {
+        margin: 0 0 8px 0;
+        color: #fca5a5;
+        font-size: 1.45rem;
+    }
+
+    .modal-top p {
+        margin: 0;
+        color: var(--text-soft);
+        line-height: 1.6;
+    }
+
+    .modal-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+
+    .detail-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 12px;
+    }
+
+    .detail-label {
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        margin-bottom: 6px;
+    }
+
+    .detail-value {
+        color: var(--text-main);
+        font-size: 1.05rem;
+        font-weight: 800;
+        word-break: break-word;
+    }
+
+    .modal-warning-box {
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.22);
+        color: #fecaca;
+        padding: 16px;
+        border-radius: 14px;
+        line-height: 1.7;
+        margin-bottom: 20px;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @media (max-width: 1200px) {
+        .metrics-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .overview-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .charts-grid,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header-actions {
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .metrics-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .score-wrap {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .metrics-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .modal-top {
+            flex-direction: column;
+        }
+
+        .page-header h1 {
+            font-size: 1.45rem;
+        }
+    }
+</style>
+
+<script>
+    const ctxTemp = document.getElementById('tempChart').getContext('2d');
+    const ctxOsc = document.getElementById('oscChart').getContext('2d');
+
+    const maxPoints = 20;
+    const labels = [];
+    const airTempData = [];
+    const processTempData = [];
+    const tempAvgData = [];
+    const oscData = [];
+    const speedData = [];
+
+    const AIR_TEMP_WARN = 305;
+    const PROCESS_TEMP_WARN = 315;
+    const OSC_WARN = 12;
+
+    let isPaused = false;
+    let loopHandle = null;
+
+    const resumeBtn = document.getElementById('resumeBtn');
+    const modeText = document.getElementById('modeText');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const anomalyModal = document.getElementById('anomalyModal');
+    const abnormalDetailsModal = document.getElementById('abnormalDetailsModal');
+
+    const chartCommonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
+        animation: { duration: 0 },
+        plugins: {
+            legend: {
+                labels: {
+                    color: '#e2e8f0',
+                    usePointStyle: true,
+                    boxWidth: 8
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { color: '#94a3b8', maxTicksLimit: 6 }
+            },
+            y: {
+                grid: { color: 'rgba(255,255,255,0.06)' },
+                ticks: { color: '#94a3b8' }
+            }
+        }
+    };
+
+    const tempChart = new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '空氣溫度',
+                    data: airTempData,
+                    borderColor: '#60a5fa',
+                    backgroundColor: 'rgba(96,165,250,0.15)',
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0
+                },
+                {
+                    label: '製程溫度',
+                    data: processTempData,
+                    borderColor: '#a78bfa',
+                    backgroundColor: 'rgba(167,139,250,0.15)',
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0
+                },
+                {
+                    label: '移動平均 MA(5)',
+                    data: tempAvgData,
+                    borderColor: '#10b981',
+                    borderDash: [6, 6],
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0
+                },
+                {
+                    label: '空氣溫度警戒線',
+                    data: [],
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    tension: 0,
+                    pointRadius: 0
+                },
+                {
+                    label: '製程溫度警戒線',
+                    data: [],
+                    borderColor: '#ef4444',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    tension: 0,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: chartCommonOptions
+    });
+
+    const oscChart = new Chart(ctxOsc, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '主軸轉速',
+                    data: speedData,
+                    borderColor: '#38bdf8',
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                },
+                {
+                    label: '轉速震盪值',
+                    data: oscData,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245,158,11,0.12)',
+                    fill: true,
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: '震盪警戒線',
+                    data: [],
+                    borderColor: '#ef4444',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    pointRadius: 0,
+                    tension: 0,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            ...chartCommonOptions,
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8', maxTicksLimit: 6 }
+                },
+                y: {
+                    position: 'left',
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    ticks: { color: '#94a3b8' },
+                    title: {
+                        display: true,
+                        text: 'RPM',
+                        color: '#94a3b8'
+                    }
+                },
+                y1: {
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#94a3b8' },
+                    title: {
+                        display: true,
+                        text: '震盪值',
+                        color: '#94a3b8'
+                    }
+                }
+            }
+        }
+    });
+
+    function setConnectionStatus(isOnline) {
+        if (isOnline) {
+            connectionStatus.className = 'connection-pill online';
+            connectionStatus.innerText = '資料串流連線正常（1 秒更新）';
+        } else {
+            connectionStatus.className = 'connection-pill offline';
+            connectionStatus.innerText = '資料串流中斷，系統將持續重試連線';
+        }
+    }
+
+    function clamp(num, min, max) {
+        return Math.max(min, Math.min(max, num));
+    }
+
+    function updateStatusUI(prediction) {
+        const badge = document.getElementById('val-prediction');
+        const predictionHint = document.getElementById('predictionHint');
+        const advice = document.getElementById('systemAdvice');
+
+        badge.className = 'status-badge';
+
+        if (prediction === 1) {
+            badge.classList.add('status-danger');
+            badge.innerText = '設備異常';
+            predictionHint.innerText = '建議立即人工檢查';
+            advice.innerText = '請優先確認空氣溫度、製程溫度、主軸轉速與工具磨損是否偏離正常範圍，必要時請停機處理。';
+            modeText.className = 'mode-danger';
+            modeText.innerText = '異常事件處理中';
+        } else {
+            badge.classList.add('status-normal');
+            badge.innerText = '運作正常';
+            predictionHint.innerText = '模型結果正常';
+            advice.innerText = '目前設備狀態穩定，建議維持既有監測流程並持續追蹤即時趨勢。';
+            modeText.className = 'mode-live';
+            modeText.innerText = '即時監測中';
+        }
+    }
+
+    function updateMetricCards(d) {
+        document.getElementById('val-air-temp').innerText = d.air_temp !== undefined ? `${d.air_temp} K` : '--';
+        document.getElementById('val-air-temp-avg').innerText = d.air_temp_avg !== undefined ? `MA(5)：${d.air_temp_avg} K` : 'MA(5)：--';
+
+        document.getElementById('val-process-temp').innerText = d.process_temp !== undefined ? `${d.process_temp} K` : '--';
+        document.getElementById('val-speed').innerText = d.rot_speed !== undefined ? `${d.rot_speed} RPM` : '--';
+        document.getElementById('val-oscillation').innerText = d.rot_oscillation !== undefined ? `震盪值：${d.rot_oscillation}` : '震盪值：--';
+        document.getElementById('val-torque').innerText = d.torque !== undefined ? `${d.torque} Nm` : '--';
+        document.getElementById('val-tool-wear').innerText = d.tool_wear !== undefined ? `${d.tool_wear} min` : '--';
+    }
+
+    function pushChartData(d) {
+        if (labels.length >= maxPoints) {
+            labels.shift();
+            airTempData.shift();
+            processTempData.shift();
+            tempAvgData.shift();
+            oscData.shift();
+            speedData.shift();
+        }
+
+        const now = new Date().toLocaleTimeString();
+        labels.push(now);
+        airTempData.push(d.air_temp ?? null);
+        processTempData.push(d.process_temp ?? null);
+        tempAvgData.push(d.air_temp_avg ?? null);
+        oscData.push(d.rot_oscillation ?? null);
+        speedData.push(d.rot_speed ?? null);
+
+        tempChart.data.datasets[3].data = labels.map(() => AIR_TEMP_WARN);
+        tempChart.data.datasets[4].data = labels.map(() => PROCESS_TEMP_WARN);
+        oscChart.data.datasets[2].data = labels.map(() => OSC_WARN);
+
+        tempChart.update();
+        oscChart.update();
+    }
+
+    function showAnomalyModal(d) {
+        abnormalDetailsModal.innerHTML = '';
+
+        const fieldLabels = {
+            udi: '設備識別碼 (UDI)',
+            type: '設備類型',
+            air_temp: '空氣溫度',
+            process_temp: '製程溫度',
+            rot_speed: '主軸轉速',
+            torque: '扭力',
+            tool_wear: '工具磨耗',
+            air_temp_avg: '溫度移動平均',
+            rot_oscillation: '轉速震盪值'
+        };
+
+        for (const key in fieldLabels) {
+            const card = document.createElement('div');
+            card.className = 'detail-card';
+
+            const label = document.createElement('div');
+            label.className = 'detail-label';
+            label.innerText = fieldLabels[key];
+
+            const value = document.createElement('div');
+            value.className = 'detail-value';
+            value.innerText = d[key] !== undefined && d[key] !== null ? d[key] : 'N/A';
+
+            card.appendChild(label);
+            card.appendChild(value);
+            abnormalDetailsModal.appendChild(card);
+        }
+
+        anomalyModal.style.display = 'flex';
+        resumeBtn.style.display = 'inline-flex';
+    }
+
+    async function updateData() {
+        if (isPaused) return;
+
+        try {
+            const response = await fetch('/api/sensor-stream');
+            const result = await response.json();
+
+            if (!result.success) {
+                setConnectionStatus(false);
+                return;
+            }
+
+            setConnectionStatus(true);
+
+            const d = result.data || {};
+            const prediction = Number(result.prediction || 0);
+
+            updateMetricCards(d);
+
+            updateStatusUI(prediction);
+            pushChartData(d);
+
+            if (prediction === 1) {
+                isPaused = true;
+                modeText.className = 'mode-danger';
+                modeText.innerText = '異常事件處理中';
+                showAnomalyModal(d);
+            }
+        } catch (error) {
+            console.error('Data fetch error:', error);
+            setConnectionStatus(false);
+        }
+    }
+
+    function updateLoop() {
+        if (isPaused) return;
+        updateData();
+        loopHandle = setTimeout(updateLoop, 1000);
+    }
+
+    function resumeMonitoring() {
+        isPaused = false;
+        anomalyModal.style.display = 'none';
+        resumeBtn.style.display = 'none';
+        modeText.className = 'mode-live';
+        modeText.innerText = '即時監測中';
+
+        // 立即重置 UI 狀態為正常
+        updateStatusUI(0, 0);
+
+        if (loopHandle) {
+            clearTimeout(loopHandle);
+        }
+        updateLoop();
+    }
+
+    document.getElementById('modalResumeBtn').onclick = resumeMonitoring;
+    resumeBtn.onclick = resumeMonitoring;
+
+    updateLoop();
+</script>
+{% endblock %}

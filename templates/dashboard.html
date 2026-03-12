@@ -1,0 +1,358 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card">
+    <h1>運作狀況儀表板 (Dashboard)</h1>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div id="stat_total" class="stat-value">--</div>
+            <div class="stat-label">總監測樣本</div>
+        </div>
+        <div class="stat-card">
+            <div id="stat_failure" class="stat-value">--</div>
+            <div class="stat-label">累積故障次數</div>
+        </div>
+        <div class="stat-card">
+            <div id="stat_rate" class="stat-value">--</div>
+            <div class="stat-label">預期故障率 (%)</div>
+        </div>
+        <div class="stat-card">
+            <div id="stat_temp" class="stat-value">--</div>
+            <div class="stat-label">平均環境溫度</div>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+        <div>
+            <h2>各類型設備故障統計</h2>
+            <div class="chart-container">
+                <canvas id="typeChart"></canvas>
+            </div>
+        </div>
+        <div>
+            <h2>即時轉速趨勢 (近期)</h2>
+            <div class="chart-container">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ 進階分析區塊 ═══════════ -->
+
+<div class="card" style="margin-top: 30px;">
+    <h1>📊 進階營運分析</h1>
+    <p style="color: var(--text-muted); margin-bottom: 30px;">深度故障分析、預測維護與經營影響評估</p>
+
+    <!-- Row 1: Top 故障設備 + 預測故障 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+        <div class="adv-panel">
+            <h2><span class="panel-icon">🔧</span> Top 故障設備</h2>
+            <p class="panel-desc">找出故障次數最多的設備，優先處理最大問題</p>
+            <div class="chart-container">
+                <canvas id="topFailChart"></canvas>
+            </div>
+        </div>
+        <div class="adv-panel">
+            <h2><span class="panel-icon">🔮</span> 預測故障</h2>
+            <p class="panel-desc">AI 模型對高磨損設備的預測結果</p>
+            <div style="display: flex; align-items: center; gap: 30px; height: 280px;">
+                <div style="flex: 1; height: 100%;">
+                    <canvas id="predictChart"></canvas>
+                </div>
+                <div id="predictStats" class="predict-summary">
+                    <div class="predict-item">
+                        <span class="predict-num danger" id="predictFail">--</span>
+                        <span class="predict-label">預測故障</span>
+                    </div>
+                    <div class="predict-item">
+                        <span class="predict-num safe" id="predictNormal">--</span>
+                        <span class="predict-label">預測正常</span>
+                    </div>
+                    <div class="predict-item">
+                        <span class="predict-num" id="predictTotal" style="color: var(--text-main);">--</span>
+                        <span class="predict-label">高磨損設備</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: 停機影響 + 趨勢比較 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+        <div class="adv-panel">
+            <h2><span class="panel-icon">💰</span> 停機影響</h2>
+            <p class="panel-desc">依設備類型估算故障造成的經營成本</p>
+            <div class="chart-container">
+                <canvas id="impactChart"></canvas>
+            </div>
+        </div>
+        <div class="adv-panel">
+            <h2><span class="panel-icon">📈</span> 趨勢比較</h2>
+            <p class="panel-desc">前半期與後半期故障率對比，判斷是否惡化</p>
+            <div class="chart-container">
+                <canvas id="trendCompareChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3: 異常設備列表 (全寬) -->
+    <div class="adv-panel">
+        <h2><span class="panel-icon">⚠️</span> 異常設備列表</h2>
+        <p class="panel-desc">轉速或扭矩超出 ±2σ 的設備，需立即行動</p>
+        <div id="anomalyTableWrap" style="overflow-x: auto;">
+            <table class="data-table" id="anomalyTable">
+                <thead>
+                    <tr>
+                        <th>UDI</th>
+                        <th>類型</th>
+                        <th>轉速 (rpm)</th>
+                        <th>扭矩 (Nm)</th>
+                        <th>工具磨損 (min)</th>
+                        <th>異常原因</th>
+                    </tr>
+                </thead>
+                <tbody id="anomalyBody">
+                    <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">載入中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const advColors = {
+        indigo: '#6366f1',
+        emerald: '#10b981',
+        amber: '#f59e0b',
+        rose: '#f43f5e',
+        sky: '#38bdf8',
+        violet: '#8b5cf6',
+        muted: '#94a3b8'
+    };
+
+    async function initDashboard() {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+
+        if (data.error) {
+            alert('數據載入失敗: ' + data.error);
+            return;
+        }
+
+        document.getElementById('stat_total').innerText = data.total_records.toLocaleString();
+        document.getElementById('stat_failure').innerText = data.failure_count;
+        document.getElementById('stat_rate').innerText = data.failure_rate;
+        document.getElementById('stat_temp').innerText = data.avg_air_temp + ' K';
+
+        new Chart(document.getElementById('typeChart'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(data.type_stats),
+                datasets: [{
+                    data: Object.values(data.type_stats),
+                    backgroundColor: [advColors.indigo, advColors.emerald, advColors.amber],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: advColors.muted } } }
+            }
+        });
+
+        new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+                labels: data.trend_data.map((_, i) => i + 1),
+                datasets: [{
+                    label: '轉速 [rpm]',
+                    data: data.trend_data,
+                    borderColor: advColors.indigo,
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: advColors.muted } },
+                    y: { ticks: { color: advColors.muted } }
+                }
+            }
+        });
+    }
+
+    async function initAdvanced() {
+        const response = await fetch('/api/dashboard-advanced');
+        const d = await response.json();
+        if (d.error) { console.error(d.error); return; }
+
+        // ── 1. Top 故障設備 (水平長條圖) ──
+        const topLabels = d.top_failure_devices.map(x => `UDI ${x.udi} (${x.type})`);
+        const topValues = d.top_failure_devices.map(x => x.failures);
+        new Chart(document.getElementById('topFailChart'), {
+            type: 'bar',
+            data: {
+                labels: topLabels,
+                datasets: [{
+                    label: '故障次數',
+                    data: topValues,
+                    backgroundColor: 'rgba(244, 63, 94, 0.7)',
+                    borderColor: advColors.rose,
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: advColors.muted } },
+                    y: { grid: { display: false }, ticks: { color: advColors.muted, font: { size: 11 } } }
+                }
+            }
+        });
+
+        // ── 2. 預測故障 (圓環圖) ──
+        const pf = d.predictive_failures;
+        document.getElementById('predictFail').innerText = pf.predicted_fail;
+        document.getElementById('predictNormal').innerText = pf.predicted_normal;
+        document.getElementById('predictTotal').innerText = pf.predicted_fail + pf.predicted_normal;
+        new Chart(document.getElementById('predictChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['預測故障', '預測正常'],
+                datasets: [{
+                    data: [pf.predicted_fail, pf.predicted_normal],
+                    backgroundColor: ['rgba(244, 63, 94, 0.8)', 'rgba(16, 185, 129, 0.8)'],
+                    borderWidth: 0,
+                    cutout: '70%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // ── 3. 停機影響 (堆疊長條圖) ──
+        const impactLabels = d.downtime_impact.map(x => `類型 ${x.type}`);
+        new Chart(document.getElementById('impactChart'), {
+            type: 'bar',
+            data: {
+                labels: impactLabels,
+                datasets: [
+                    {
+                        label: '故障次數',
+                        data: d.downtime_impact.map(x => x.failures),
+                        backgroundColor: 'rgba(244, 63, 94, 0.7)',
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '預估成本 ($)',
+                        data: d.downtime_impact.map(x => x.est_cost),
+                        backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                        borderRadius: 4,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: advColors.muted } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: advColors.muted } },
+                    y: {
+                        position: 'left',
+                        title: { display: true, text: '故障數', color: advColors.muted },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: advColors.muted }
+                    },
+                    y1: {
+                        position: 'right',
+                        title: { display: true, text: '成本 ($)', color: advColors.muted },
+                        grid: { display: false },
+                        ticks: { color: advColors.amber }
+                    }
+                }
+            }
+        });
+
+        // ── 4. 趨勢比較 (雙折線圖) ──
+        const tc = d.trend_comparison;
+        new Chart(document.getElementById('trendCompareChart'), {
+            type: 'line',
+            data: {
+                labels: tc.labels,
+                datasets: [
+                    {
+                        label: '前半期故障率 (%)',
+                        data: tc.first_half,
+                        borderColor: advColors.sky,
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointBackgroundColor: advColors.sky
+                    },
+                    {
+                        label: '後半期故障率 (%)',
+                        data: tc.second_half,
+                        borderColor: advColors.rose,
+                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointBackgroundColor: advColors.rose
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: advColors.muted } } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: advColors.muted } },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: advColors.muted, callback: v => v + '%' }
+                    }
+                }
+            }
+        });
+
+        // ── 5. 異常設備列表 (表格) ──
+        const tbody = document.getElementById('anomalyBody');
+        if (d.anomaly_devices.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--accent);">✅ 所有設備運行正常</td></tr>';
+        } else {
+            tbody.innerHTML = d.anomaly_devices.map(dev => `
+                <tr>
+                    <td><strong>${dev.udi}</strong></td>
+                    <td><span class="type-badge type-${dev.type}">${dev.type}</span></td>
+                    <td>${dev.speed}</td>
+                    <td>${dev.torque}</td>
+                    <td>${dev.tool_wear}</td>
+                    <td><span class="anomaly-tag">${dev.reason}</span></td>
+                </tr>
+            `).join('');
+        }
+    }
+
+    initDashboard();
+    initAdvanced();
+</script>
+{% endblock %}

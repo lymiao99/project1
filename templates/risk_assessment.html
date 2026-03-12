@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card">
+    <h1>風險評估與維護預算</h1>
+    <p style="color: var(--text-muted); margin-bottom: 30px;">分析當前設備群組的整體健康狀況，並提供預防性維護之參考預算。</p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">系統異常偵測數</div>
+            <div id="anomalyCount" class="stat-value" style="color: var(--danger);">載入中...</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">當前平均故障率</div>
+            <div id="globalFailureRate" class="stat-value">載入中...</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">平均工具磨損度</div>
+            <div id="avgToolWear" class="stat-value">載入中...</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">建議維護預算 (月)</div>
+            <div class="stat-value">$12,500</div>
+        </div>
+    </div>
+
+    <div style="margin-top: 40px;">
+        <h2>風險動態趨勢 (轉速波動)</h2>
+        <div class="chart-container">
+            <canvas id="riskTrendChart"></canvas>
+        </div>
+    </div>
+
+    <div class="form-grid" style="margin-top: 40px;">
+        <div
+            style="padding: 20px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 15px;">
+            <h3 style="color: var(--danger);">高風險預警</h3>
+            <p style="margin-top: 10px; font-size: 0.9rem;">檢測到轉速不穩定性增加。若不採取行動，預估下個月維護成本將上升 25%。</p>
+        </div>
+        <div
+            style="padding: 20px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 15px;">
+            <h3 style="color: var(--accent);">預算分配建議</h3>
+            <p style="margin-top: 10px; font-size: 0.9rem;">主要預算應分配至「偏高溫度」監測設備（M 類型），可有效降低 15% 突發停機機率。</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadRiskData() {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+
+        document.getElementById('anomalyCount').innerText = data.anomalies;
+        document.getElementById('globalFailureRate').innerText = data.failure_rate + '%';
+        document.getElementById('avgToolWear').innerText = data.avg_tool_wear + ' min';
+
+        const ctx = document.getElementById('riskTrendChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({ length: data.trend_data.length }, (_, i) => `樣本 ${i + 1}`),
+                datasets: [{
+                    label: '機器轉速 [rpm]',
+                    data: data.trend_data,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { grid: { color: 'rgba(255,255,255,0.1)' } },
+                    x: { display: false }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } }
+                }
+            }
+        });
+    }
+
+    loadRiskData();
+</script>
+{% endblock %}

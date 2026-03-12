@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧工廠設備檢測預警系統 - 登入</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --error: #ef4444;
+            --success: #10b981;
+        }
+
+        body {
+            font-family: 'Outfit', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            color: white;
+            font-size: 1rem;
+            transition: all 0.2s;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 1rem;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+        }
+
+        button:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .message {
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            text-align: center;
+            min-height: 1.25rem;
+        }
+
+        .error-message {
+            color: var(--error);
+        }
+
+        .success-message {
+            color: var(--success);
+        }
+
+        .lock-timer {
+            font-weight: bold;
+            color: var(--error);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-card">
+        <h1>智慧工廠設備檢測預警系統登入</h1>
+        <p class="subtitle">請輸入您的帳號密碼以進入預測系統</p>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="acct_no">帳號</label>
+                <input type="text" id="acct_no" name="acct_no" required placeholder="請輸入帳號">
+            </div>
+            <div class="form-group">
+                <label for="pwds">密碼</label>
+                <input type="password" id="pwds" name="pwds" required placeholder="請輸入密碼">
+            </div>
+            <button type="submit" id="submitBtn">登入系統</button>
+        </form>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const messageDiv = document.getElementById('message');
+        const acctInput = document.getElementById('acct_no');
+        const pwdsInput = document.getElementById('pwds');
+
+        let lockSeconds = 0;
+        let lockTimer = null;
+
+        function startLock(seconds) {
+            lockSeconds = seconds;
+            submitBtn.disabled = true;
+            acctInput.disabled = true;
+            pwdsInput.disabled = true;
+
+            updateLockMessage();
+
+            lockTimer = setInterval(() => {
+                lockSeconds--;
+                if (lockSeconds <= 0) {
+                    clearInterval(lockTimer);
+                    unlock();
+                } else {
+                    updateLockMessage();
+                }
+            }, 1000);
+        }
+
+        function updateLockMessage() {
+            messageDiv.innerHTML = `<span class="error-message">錯誤次數過多，鎖定中... (<span class="lock-timer">${lockSeconds}</span> 秒)</span>`;
+        }
+
+        function unlock() {
+            submitBtn.disabled = false;
+            acctInput.disabled = false;
+            pwdsInput.disabled = false;
+            messageDiv.innerHTML = '';
+        }
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            messageDiv.innerHTML = '正在驗證...';
+
+            const formData = new FormData(form);
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    messageDiv.innerHTML = '<span class="success-message">驗證成功，正在跳轉...</span>';
+                    setTimeout(() => {
+                        window.location.href = result.redirect;
+                    }, 500);
+                } else {
+                    messageDiv.innerHTML = `<span class="error-message">${result.message}</span>`;
+                    if (result.lock_time > 0) {
+                        startLock(result.lock_time);
+                    }
+                }
+            } catch (error) {
+                messageDiv.innerHTML = '<span class="error-message">網路連線發生錯誤</span>';
+            }
+        };
+    </script>
+</body>
+
+</html>

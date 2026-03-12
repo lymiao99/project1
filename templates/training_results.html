@@ -1,0 +1,117 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="card">
+    <h1>模型訓練評估結果</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <p style="color: var(--text-muted); margin: 0;">基於 AI4I 2020 Predictive Maintenance Dataset 的訓練成效分析。</p>
+        <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">選擇評估模型</label>
+            <select id="modelSelector" style="padding: 10px; background: var(--card-bg); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">
+                <option value="logistic_regression">Logistic Regression</option>
+                <option value="random_forest">Random Forest</option>
+                <option value="xgboost">XGBoost</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">模型準確度 (Accuracy)</div>
+            <div id="accValue" class="stat-value">--%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">召回率 (Recall - 故障偵測)</div>
+            <div id="recValue" class="stat-value">--%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">精準率 (Precision)</div>
+            <div id="precValue" class="stat-value">--%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">訓練樣本數</div>
+            <div id="totalSamples" class="stat-value">載入中...</div>
+        </div>
+    </div>
+
+    <div class="chart-container" style="margin-top: 40px;">
+        <h2>故障類型分佈 (訓練數據)</h2>
+        <canvas id="trainingChart"></canvas>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: rgba(255, 255, 255, 0.05); border-radius: 15px; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <h3>AI 模型摘要</h3>
+        <ul style="margin-top: 15px; color: var(--text-muted); line-height: 1.8;">
+            <li><strong>演算法：</strong> <span id="modelAlgo">--</span></li>
+            <li><strong>特徵工程：</strong> 成比例縮放 (StandardScaler) 與 類別編碼 (OneHotEncoder)</li>
+            <li><strong>核心描述：</strong> <span id="modelSummary">--</span></li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    let modelData = null;
+
+    async function initPage() {
+        await loadTrainingStats();
+        await loadModelResults();
+        
+        document.getElementById('modelSelector').addEventListener('change', (e) => {
+            updateModelUI(e.target.value);
+        });
+    }
+
+    async function loadModelResults() {
+        const response = await fetch('/api/model-results');
+        modelData = await response.json();
+        // 預設顯示 Logistic Regression
+        updateModelUI('logistic_regression');
+    }
+
+    function updateModelUI(modelName) {
+        if (!modelData || !modelData[modelName]) return;
+        const m = modelData[modelName];
+        
+        document.getElementById('accValue').innerText = m.accuracy + '%';
+        document.getElementById('recValue').innerText = m.recall + '%';
+        document.getElementById('precValue').innerText = m.precision + '%';
+        document.getElementById('modelAlgo').innerText = m.algorithm;
+        document.getElementById('modelSummary').innerText = m.summary;
+    }
+
+    async function loadTrainingStats() {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+
+        document.getElementById('totalSamples').innerText = data.total_records.toLocaleString();
+
+        const ctx = document.getElementById('trainingChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(data.type_stats),
+                datasets: [{
+                    label: '各設備類型故障數',
+                    data: Object.values(data.type_stats),
+                    backgroundColor: 'rgba(99, 102, 241, 0.5)',
+                    borderColor: '#6366f1',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } }
+                }
+            }
+        });
+    }
+
+    initPage();
+</script>
+{% endblock %}

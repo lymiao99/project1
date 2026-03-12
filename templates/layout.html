@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>預測性維護 AI 系統</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        {% if current_user %}
+        <div class="user-info-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px 20px; background: rgba(255, 255, 255, 0.05); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="display: flex; gap: 20px;">
+                <span><strong>姓名：</strong> {{ current_user.acct_name }}</span>
+                <span><strong>角色：</strong> {{ current_user.role }}</span>
+            </div>
+            <a href="/logout" style="color: #ef4444; font-weight: 600; text-decoration: none; padding: 5px 15px; border: 1px solid #ef4444; border-radius: 8px; font-size: 0.875rem; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#ef4444'">登出系統</a>
+        </div>
+        {% endif %}
+        
+        <nav>
+            <div class="logo">AI Predictive Maintenance</div>
+            <div class="nav-links">
+                {% if session.get('user') in ['admin001', 'tl001'] %}
+                <a href="/" id="nav-home">即時監測</a>
+                <a href="/predict-manual" id="nav-manual">單次預測</a>
+                <a href="/maintenance-error" id="nav-error">異常記錄處理</a>
+                {% endif %}
+                
+                {% if session.get('user') in ['admin001', 'mgr001'] %}
+                <a href="/dashboard" id="nav-dash">數據儀表板</a>
+                {% endif %}
+                
+                {% if session.get('user') in ['admin001', 'tl001'] %}
+                <a href="/training-results" id="nav-train">訓練結果</a>
+                {% endif %}
+                
+                {% if session.get('user') in ['admin001', 'mgr001'] %}
+                <a href="/risk-assessment" id="nav-risk">風險預算</a>
+                {% endif %}
+            </div>
+        </nav>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        // Set active nav link
+        const path = window.location.pathname;
+        if (path === '/') document.getElementById('nav-home')?.classList.add('active');
+        if (path === '/predict-manual') document.getElementById('nav-manual')?.classList.add('active');
+        if (path === '/maintenance-error') document.getElementById('nav-error')?.classList.add('active');
+        if (path === '/dashboard') document.getElementById('nav-dash')?.classList.add('active');
+        if (path === '/training-results') document.getElementById('nav-train')?.classList.add('active');
+        if (path === '/risk-assessment') document.getElementById('nav-risk')?.classList.add('active');
+    </script>
+</body>
+
+</html>

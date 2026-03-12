@@ -1,0 +1,165 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div
+    style="background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 18px; padding: 24px; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16); backdrop-filter: blur(10px);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2 style="color: #f8fafc; font-size: 2rem; margin: 0;">設備記錄異常處理清單</h2>
+        <button onclick="fetchErrors()" class="btn-primary" style="
+                    padding: 2px 8px;
+                    border-radius: 6px;
+                    border: none;
+                    background: #60a5fa;
+                    color: white;
+                    cursor: pointer;
+                    font-weight: 400;
+                    width: auto;
+                    min-width: 0;
+                    display: inline-block;
+                ">
+            重新整理
+        </button>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; color: #cbd5e1; font-size: 0.95rem;">
+            <thead>
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255,255,255,0.02);">
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">UDI</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">設備類型</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">建議行動 / 備註</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">狀態</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">最後更新者</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8;">最後更新時間</th>
+                    <th style="padding: 14px 12px; font-weight: 600; color: #94a3b8; text-align: right;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="error-list-body">
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 30px; color: #64748b;">資料載入中...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 編輯視窗 -->
+<div id="editModal"
+    style="display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.78); backdrop-filter: blur(8px); z-index: 1000; justify-content: center; align-items: center;">
+    <div
+        style="background: #1e293b; border: 1px solid rgba(255, 255, 255, 0.1); width: 100%; max-width: 500px; border-radius: 16px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+        <h3 style="color: white; margin-top: 0; margin-bottom: 20px; font-size: 1.25rem;">編輯異常建議與狀態</h3>
+
+        <input type="hidden" id="edit-udi">
+
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">建議行動
+                (Recommendation)</label>
+            <textarea id="edit-recommendation" rows="4"
+                style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white; resize: vertical; box-sizing: border-box;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button onclick="closeEditModal()"
+                style="padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: #cbd5e1; cursor: pointer; font-weight: 600;">取消</button>
+            <button onclick="saveEdit()"
+                style="padding: 10px 16px; border-radius: 8px; border: none; background: #10b981; color: white; cursor: pointer; font-weight: 600;">儲存並標記處理
+                (Process_flag=1)</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentErrors = [];
+
+    async function fetchErrors() {
+        try {
+            const tbody = document.getElementById('error-list-body');
+            const res = await fetch('/api/maintenance-error');
+            const result = await res.json();
+
+            if (result.success) {
+                currentErrors = result.data;
+                renderTable();
+            } else {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #ef4444; padding: 20px;">載入失敗: ${result.error}</td></tr>`;
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('error-list-body');
+        tbody.innerHTML = '';
+
+        if (currentErrors.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: #64748b;">目前沒有異常紀錄</td></tr>';
+            return;
+        }
+
+        currentErrors.forEach(err => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
+
+            const isProcessed = err.process_flag === 1;
+            const statusBadge = isProcessed
+                ? '<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">已處理</span>'
+                : '<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">待處理</span>';
+
+            tr.innerHTML = `
+                <td style="padding: 16px 12px; font-weight: 600; color: #f8fafc;">${err.udi}</td>
+                <td style="padding: 16px 12px;">${err.type || ''}</td>
+                <td style="padding: 16px 12px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${err.recommendation || '-'}</td>
+                <td style="padding: 16px 12px;">${statusBadge}</td>
+                <td style="padding: 16px 12px;">${err.last_update_by || '-'}</td>
+                <td style="padding: 16px 12px; font-size: 0.85rem;">${err.last_update_date || '-'}</td>
+                <td style="padding: 16px 12px; text-align: right;">
+                    <button onclick="openEditModal(${err.udi})" style="padding: 6px 12px; border-radius: 6px; border: none; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.85rem; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📝 編輯</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function openEditModal(udi) {
+        const err = currentErrors.find(e => e.udi === udi);
+        if (!err) return;
+
+        document.getElementById('edit-udi').value = udi;
+        document.getElementById('edit-recommendation').value = err.recommendation || '';
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    async function saveEdit() {
+        const udi = document.getElementById('edit-udi').value;
+        const recommendation = document.getElementById('edit-recommendation').value;
+
+        try {
+            const res = await fetch('/api/maintenance-error/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ udi: parseInt(udi), recommendation })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                closeEditModal();
+                fetchErrors(); // 重新撈取資料
+            } else {
+                alert('更新失敗: ' + result.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('系統錯誤');
+        }
+    }
+
+    // 初始化時載入資料
+    document.addEventListener('DOMContentLoaded', fetchErrors);
+</script>
+{% endblock %}
