@@ -10,12 +10,12 @@ from sqlalchemy import create_engine, text
 import urllib.parse
 from dotenv import load_dotenv
 
-import os
-from fastapi import FastAPI, HTTPException, request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from supabase import create_client, create_client
-from dotenv import load_dotenv
+#import os
+#from fastapi import FastAPI, HTTPException, request
+#from fastapi.staticfiles import StaticFiles
+#from fastapi.responses import HTMLResponse, FileResponse
+#from supabase import create_client, create_client
+#from dotenv import load_dotenv
 
 load_dotenv()
 
