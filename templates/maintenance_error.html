@@ -3,22 +3,50 @@
 {% block content %}
 <div
     style="background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 18px; padding: 24px; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16); backdrop-filter: blur(10px);">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2 style="color: #f8fafc; font-size: 2rem; margin: 0;">設備記錄異常處理清單</h2>
-        <button onclick="fetchErrors()" class="btn-primary" style="
-                    padding: 2px 8px;
-                    border-radius: 6px;
-                    border: none;
-                    background: #60a5fa;
-                    color: white;
-                    cursor: pointer;
-                    font-weight: 400;
-                    width: auto;
-                    min-width: 0;
-                    display: inline-block;
-                ">
-            重新整理
-        </button>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="resetFilters()"
+                style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #cbd5e1; cursor: pointer; font-size: 0.9rem;">重設篩選</button>
+            <button onclick="fetchErrors(1)" class="btn-primary"
+                style="padding: 8px 30px; border-radius: 8px; border: none; background: #3b82f6; color: white; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: all 0.2s; white-space: nowrap;">
+                搜尋 / 重新整理 </button>
+        </div>
+    </div>
+
+    <!-- 搜尋篩選區 -->
+    <div
+        style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px; padding: 20px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+        <div style="flex: 1; min-width: 150px;">
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">設備類型</label>
+            <select id="filter-type" onchange="fetchErrors(1)"
+                style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;">
+                <option value="">全部</option>
+                <option value="L">L (Low)</option>
+                <option value="M">M (Medium)</option>
+                <option value="H">H (High)</option>
+            </select>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">狀態</label>
+            <select id="filter-status" onchange="fetchErrors(1)"
+                style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;">
+                <option value="">全部</option>
+                <option value="0" selected>待處理</option>
+                <option value="1">已處理</option>
+            </select>
+        </div>
+        <div style="flex: 2; min-width: 300px;">
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">最後更新日期 (從 ~
+                到)</label>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <input type="date" id="filter-start-date"
+                    style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;">
+                <span style="color: #64748b;">~</span>
+                <input type="date" id="filter-end-date"
+                    style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;">
+            </div>
+        </div>
     </div>
 
     <div style="overflow-x: auto;">
@@ -40,6 +68,23 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- 分頁區 -->
+    <div id="pagination-controls"
+        style="display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05);">
+        <div style="color: #64748b; font-size: 0.9rem;">
+            共 <span id="total-records" style="color: #cbd5e1; font-weight: 600;">0</span> 筆紀錄
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button id="prev-page" onclick="changePage(-1)"
+                style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #cbd5e1; cursor: pointer; transition: all 0.2s;">上一頁</button>
+            <span style="color: #94a3b8; font-size: 0.95rem; white-space: nowrap; flex-shrink: 0;">
+                第<span id="current-page" style="color: #f8fafc; font-weight: 600;">1</span> / <span
+                    id="total-pages">1</span> 頁</span>
+            <button id="next-page" onclick="changePage(1)"
+                style="padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #cbd5e1; cursor: pointer; transition: all 0.2s;">下一頁</button>
+        </div>
     </div>
 </div>
 
@@ -71,15 +116,39 @@
 
 <script>
     let currentErrors = [];
+    let currentPage = 1;
+    let totalPages = 1;
 
-    async function fetchErrors() {
+    async function fetchErrors(page = 1) {
+        // 防止傳入 Event 物件 (從監聽器觸發時)
+        if (typeof page !== 'number') page = 1;
+
+        currentPage = page;
+        const type = document.getElementById('filter-type').value;
+        const status = document.getElementById('filter-status').value;
+        const startDate = document.getElementById('filter-start-date').value;
+        const endDate = document.getElementById('filter-end-date').value;
+
         try {
             const tbody = document.getElementById('error-list-body');
-            const res = await fetch('/api/maintenance-error');
+            const url = `/api/maintenance-error?page=${page}&limit=10&type=${type}&status=${status}&start_date=${startDate}&end_date=${endDate}`;
+            const res = await fetch(url);
             const result = await res.json();
 
             if (result.success) {
                 currentErrors = result.data;
+                totalPages = result.pages;
+
+                document.getElementById('total-records').innerText = result.total;
+                document.getElementById('current-page').innerText = result.page;
+                document.getElementById('total-pages').innerText = result.pages;
+
+                // 控制按鈕狀態
+                document.getElementById('prev-page').disabled = result.page <= 1;
+                document.getElementById('next-page').disabled = result.page >= result.pages;
+                document.getElementById('prev-page').style.opacity = result.page <= 1 ? '0.5' : '1';
+                document.getElementById('next-page').style.opacity = result.page >= result.pages ? '0.5' : '1';
+
                 renderTable();
             } else {
                 tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #ef4444; padding: 20px;">載入失敗: ${result.error}</td></tr>`;
@@ -87,6 +156,21 @@
         } catch (err) {
             console.error(err);
         }
+    }
+
+    function changePage(delta) {
+        const next = currentPage + delta;
+        if (next >= 1 && next <= totalPages) {
+            fetchErrors(next);
+        }
+    }
+
+    function resetFilters() {
+        document.getElementById('filter-type').value = '';
+        document.getElementById('filter-status').value = '';
+        document.getElementById('filter-start-date').value = '';
+        document.getElementById('filter-end-date').value = '';
+        fetchErrors(1);
     }
 
     function renderTable() {
@@ -107,6 +191,11 @@
                 ? '<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">已處理</span>'
                 : '<span style="padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">待處理</span>';
 
+            const userRole = "{{ session.get('user_info', {}).get('role') }}";
+            const editButton = userRole === 'MANAGER'
+                ? ''
+                : `<button onclick="openEditModal(${err.udi})" style="padding: 6px 12px; border-radius: 6px; border: none; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.85rem; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📝 編輯</button>`;
+
             tr.innerHTML = `
                 <td style="padding: 16px 12px; font-weight: 600; color: #f8fafc;">${err.udi}</td>
                 <td style="padding: 16px 12px;">${err.type || ''}</td>
@@ -115,7 +204,7 @@
                 <td style="padding: 16px 12px;">${err.last_update_by || '-'}</td>
                 <td style="padding: 16px 12px; font-size: 0.85rem;">${err.last_update_date || '-'}</td>
                 <td style="padding: 16px 12px; text-align: right;">
-                    <button onclick="openEditModal(${err.udi})" style="padding: 6px 12px; border-radius: 6px; border: none; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 0.85rem; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">📝 編輯</button>
+                    ${editButton}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -160,6 +249,12 @@
     }
 
     // 初始化時載入資料
-    document.addEventListener('DOMContentLoaded', fetchErrors);
+    document.addEventListener('DOMContentLoaded', () => {
+        // 設定迄日期預設為今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filter-end-date').value = today;
+
+        fetchErrors(1);
+    });
 </script>
 {% endblock %}

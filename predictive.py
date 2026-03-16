@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import joblib
 import json
 import pandas as pd
@@ -362,22 +362,21 @@ def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
     
-    user_acct = session.get('user')
-    permissions = {'admin001', 'mgr001'}
-    if user_acct not in permissions:
+    role = session.get('user_info', {}).get('role')
+    if role not in ['ADMIN', 'MANAGER']:
         return "Forbidden", 403
         
     return render_template('dashboard.html')
 
 @app.route('/training-results')
 def training_results():
-    """訓練結果 (組長)"""
+    """訓練結果"""
     if 'user' not in session:
         return redirect(url_for('login'))
     
-    user_acct = session.get('user')
-    permissions = {'admin001', 'tl001'}
-    if user_acct not in permissions:
+    role = session.get('user_info', {}).get('role')
+    # 使用者要求: TEAM LEADER 看不到, MANAGER 看得到
+    if role not in ['ADMIN', 'MANAGER']:
         return "Forbidden", 403
         
     return render_template('training_results.html')
@@ -388,9 +387,8 @@ def risk_assessment():
     if 'user' not in session:
         return redirect(url_for('login'))
     
-    user_acct = session.get('user')
-    permissions = {'admin001', 'mgr001'}
-    if user_acct not in permissions:
+    role = session.get('user_info', {}).get('role')
+    if role not in ['ADMIN', 'MANAGER']:
         return "Forbidden", 403
         
     return render_template('risk_assessment.html')
@@ -401,30 +399,227 @@ def maintenance_error():
     if 'user' not in session:
         return redirect(url_for('login'))
     
-    user_acct = session.get('user')
-    permissions = {'admin001', 'tl001'}
-    if user_acct not in permissions:
+    role = session.get('user_info', {}).get('role')
+    if role not in ['ADMIN', 'MANAGER', 'TEAM_LEADER']:
         return "Forbidden", 403
         
     return render_template('maintenance_error.html')
 
-@app.route('/api/maintenance-error')
-def api_maintenance_error():
-    """取得異常紀錄列表"""
+@app.route('/user-management')
+def user_management():
+    """使用者管理 (管理員)"""
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    
+    user_acct = session.get('user')
+    # 目前先開放給 admin001
+    if user_acct != 'admin001':
+        return "Forbidden", 403
+        
+    return render_template('user_management.html')
+
+@app.route('/api/users')
+def api_users():
+    """取得使用者列表"""
+    if 'user' not in session or session.get('user') != 'admin001':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
     try:
-        query = "SELECT * FROM maintenance_error ORDER BY last_update_date DESC"
+        query = "SELECT id, acct_no, acct_name, role, created_at, created_by, last_updated_at, last_updated_by FROM user_info ORDER BY id ASC"
         with engine.connect() as conn:
             result = conn.execute(text(query)).fetchall()
+            data = []
+            for row in result:
+                item = dict(row._mapping)
+                if item['created_at']:
+                    item['created_at'] = item['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                if item['last_updated_at']:
+                    item['last_updated_at'] = item['last_updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+                data.append(item)
+            return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/users/add', methods=['POST'])
+def api_add_user():
+    """新增使用者"""
+    if 'user' not in session or session.get('user') != 'admin001':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    acct_no = data.get('acct_no')
+    acct_name = data.get('acct_name')
+    pwds = data.get('pwds')
+    role = data.get('role')
+    
+    if not acct_no or not pwds:
+        return jsonify({'success': False, 'error': '帳號與密碼為必填'})
+        
+    try:
+        query = text("""
+            INSERT INTO user_info (acct_no, acct_name, pwds, role, created_by, last_updated_by)
+            VALUES (:acct_no, :acct_name, :pwds, :role, :created_by, :last_updated_by)
+        """)
+        with engine.begin() as conn:
+            conn.execute(query, {
+                'acct_no': acct_no,
+                'acct_name': acct_name,
+                'pwds': pwds,
+                'role': role,
+                'created_by': session['user'],
+                'last_updated_by': session['user']
+            })
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/users/update', methods=['POST'])
+def api_update_user():
+    """更新使用者"""
+    if 'user' not in session or session.get('user') != 'admin001':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    uid = data.get('id')
+    acct_no = data.get('acct_no')
+    acct_name = data.get('acct_name')
+    pwds = data.get('pwds')
+    role = data.get('role')
+    
+    if not uid:
+        return jsonify({'success': False, 'error': '缺失使用者 ID'})
+        
+    try:
+        # 密碼只有在有提供時才更新
+        if pwds:
+            query = text("""
+                UPDATE user_info 
+                SET acct_no = :acct_no, 
+                    acct_name = :acct_name, 
+                    pwds = :pwds, 
+                    role = :role, 
+                    last_updated_by = :last_updated_by,
+                    last_updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id
+            """)
+        else:
+            query = text("""
+                UPDATE user_info 
+                SET acct_no = :acct_no, 
+                    acct_name = :acct_name, 
+                    role = :role, 
+                    last_updated_by = :last_updated_by,
+                    last_updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id
+            """)
+            
+        params = {
+            'acct_no': acct_no,
+            'acct_name': acct_name,
+            'role': role,
+            'last_updated_by': session['user'],
+            'id': uid
+        }
+        if pwds:
+            params['pwds'] = pwds
+            
+        with engine.begin() as conn:
+            conn.execute(query, params)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/users/delete', methods=['POST'])
+def api_delete_user():
+    """刪除使用者"""
+    if 'user' not in session or session.get('user') != 'admin001':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    uid = data.get('id')
+    
+    if not uid:
+        return jsonify({'success': False, 'error': '缺失使用者 ID'})
+        
+    try:
+        query = text("DELETE FROM user_info WHERE id = :id")
+        with engine.begin() as conn:
+            conn.execute(query, {'id': uid})
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/maintenance-error')
+def api_maintenance_error():
+    """取得異常紀錄列表 (支援分頁、篩選、排序)"""
+    try:
+        # 取得分頁與篩選參數
+        try:
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 10))
+        except (ValueError, TypeError):
+            page = 1
+            limit = 10
+            
+        offset = (page - 1) * limit
+        
+        equip_type = request.args.get('type')
+        status = request.args.get('status')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        # 構建查詢語法
+        where_clauses = []
+        params = {}
+        
+        if equip_type:
+            where_clauses.append("type = :type")
+            params['type'] = equip_type
+        if status:
+            where_clauses.append("process_flag = :status")
+            params['status'] = int(status)
+        if start_date:
+            where_clauses.append("last_update_date >= :start_date")
+            params['start_date'] = f"{start_date} 00:00:00"
+        if end_date:
+            where_clauses.append("last_update_date <= :end_date")
+            params['end_date'] = f"{end_date} 23:59:59"
+            
+        where_str = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        
+        # 取得總筆數
+        count_query = text(f"SELECT COUNT(*) FROM maintenance_error {where_str}")
+        
+        # 取得分頁資料 (強制依照 last_update_date DESC 排序)
+        data_query = text(f"""
+            SELECT * FROM maintenance_error 
+            {where_str} 
+            ORDER BY last_update_date DESC 
+            LIMIT :limit OFFSET :offset
+        """)
+        params['limit'] = limit
+        params['offset'] = offset
+
+        with engine.connect() as conn:
+            total_count = conn.execute(count_query, {k:v for k,v in params.items() if k not in ['limit', 'offset']}).scalar()
+            result = conn.execute(data_query, params).fetchall()
             data = [dict(row._mapping) for row in result]
             
-            # handle dates
+            # 處理時間格式
             for row in data:
                 if 'created_date' in row and row['created_date']:
                     row['created_date'] = row['created_date'].strftime('%Y-%m-%d %H:%M:%S')
                 if 'last_update_date' in row and row['last_update_date']:
                     row['last_update_date'] = row['last_update_date'].strftime('%Y-%m-%d %H:%M:%S')
 
-            return jsonify({'success': True, 'data': data})
+            return jsonify({
+                'success': True, 
+                'data': data, 
+                'total': total_count,
+                'page': page,
+                'limit': limit,
+                'pages': (total_count + limit - 1) // limit
+            })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -433,6 +628,11 @@ def update_maintenance_error():
     """更新異常紀錄建議事項與狀態"""
     if 'user' not in session:
         return jsonify({'success': False, 'error': 'Unauthorized'})
+
+    role = session.get('user_info', {}).get('role')
+    # 使用者要求: MANAGER 不能編輯
+    if role == 'MANAGER':
+        return jsonify({'success': False, 'error': '權限不足：經理帳號僅供查詢，不可編輯內容'})
 
     data = request.json
     udi = data.get('udi')

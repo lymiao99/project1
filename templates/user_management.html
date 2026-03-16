@@ -1,0 +1,261 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="header">
+    <h1>使用者帳號權限管理</h1>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">使用者列表</h2>
+        <button class="btn btn-primary" onclick="openModal('add')" style="
+                    padding: 2px 8px;
+                    border-radius: 6px;
+                    border: none;
+                    background: #60a5fa;
+                    color: white;
+                    cursor: pointer;
+                    font-weight: 400;
+                    width: auto;
+                    min-width: 0;
+                    display: inline-block;
+                    font-size: 20px;">新增使用者</button>
+    </div>
+
+    <div style=" overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.1); text-align: left;">
+                    <th style="padding: 12px;">ID</th>
+                    <th style="padding: 12px;">帳號</th>
+                    <th style="padding: 12px;">姓名</th>
+                    <th style="padding: 12px;">角色</th>
+                    <th style="padding: 12px;">建立日期</th>
+                    <th style="padding: 12px;">建立者</th>
+                    <th style="padding: 12px;">修改日期</th>
+                    <th style="padding: 12px;">修改者</th>
+                    <th style="padding: 12px; text-align: center;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="user-table-body">
+                <!-- 預留位置 -->
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 20px; color: rgba(255,255,255,0.5);">載入中...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="userModal" class="modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
+    <div class="card"
+        style="width: 500px; max-width: 90%; background: #1e293b; border: 1px solid rgba(255,255,255,0.1);">
+        <h3 id="modalTitle">新增使用者</h3>
+        <form id="userForm" onsubmit="saveUser(event)">
+            <input type="hidden" id="user-id">
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">帳號 (acct_no)</label>
+                <input type="text" id="acct_no" required
+                    style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">姓名 (acct_name)</label>
+                <input type="text" id="acct_name" required
+                    style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">密碼 (pwd)</label>
+                <input type="password" id="pwds" placeholder="若不修改則留空"
+                    style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">角色 (role)</label>
+                <select id="role"
+                    style="width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white;">
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="MANAGER">MANAGER</option>
+                    <option value="TEAM_LEADER">TEAM_LEADER</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn" style="background: rgba(255,255,255,0.1);"
+                    onclick="closeModal()">取消</button>
+                <button type="submit" class="btn btn-primary">儲存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .modal {
+        display: none !important;
+        animation: fadeIn 0.3s forwards;
+    }
+
+    .modal.show {
+        display: flex !important;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .action-btn {
+        background: none;
+        border: none;
+        color: #3b82f6;
+        cursor: pointer;
+        font-weight: 600;
+        margin: 0 5px;
+        transition: color 0.2s;
+    }
+
+    .action-btn:hover {
+        color: #60a5fa;
+    }
+
+    .action-btn.delete {
+        color: #ef4444;
+    }
+
+    .action-btn.delete:hover {
+        color: #f87171;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', fetchUsers);
+
+    let users = [];
+
+    async function fetchUsers() {
+        const res = await fetch('/api/users');
+        const result = await res.json();
+        if (result.success) {
+            users = result.data;
+            renderTable();
+        } else {
+            alert('無法載入使用者: ' + result.error);
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('user-table-body');
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">無使用者資料</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(user => `
+            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                <td style="padding: 12px;">${user.id}</td>
+                <td style="padding: 12px;">${user.acct_no}</td>
+                <td style="padding: 12px;">${user.acct_name || '-'}</td>
+                <td style="padding: 12px;">${user.role || '-'}</td>
+                <td style="padding: 12px; font-size: 0.8rem; color: rgba(255,255,255,0.6);">${user.created_at || '-'}</td>
+                <td style="padding: 12px;">${user.created_by || '-'}</td>
+                <td style="padding: 12px; font-size: 0.8rem; color: rgba(255,255,255,0.6);">${user.last_updated_at || '-'}</td>
+                <td style="padding: 12px;">${user.last_updated_by || '-'}</td>
+                <td style="padding: 12px; text-align: center;">
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button class="action-btn" onclick="openModal('edit', ${user.id})">修改</button>
+                        <button class="action-btn delete" onclick="deleteUser(${user.id})">刪除</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openModal(mode, id = null) {
+        const modal = document.getElementById('userModal');
+        const form = document.getElementById('userForm');
+        const title = document.getElementById('modalTitle');
+
+        form.reset();
+        document.getElementById('user-id').value = '';
+
+        if (mode === 'add') {
+            title.innerText = '新增使用者';
+            document.getElementById('pwds').required = true;
+            document.getElementById('pwds').placeholder = '請輸入密碼';
+        } else {
+            title.innerText = '修改使用者';
+            const user = users.find(u => u.id === id);
+            if (user) {
+                document.getElementById('user-id').value = user.id;
+                document.getElementById('acct_no').value = user.acct_no;
+                document.getElementById('acct_name').value = user.acct_name || '';
+                document.getElementById('role').value = user.role || 'ADMIN';
+                document.getElementById('pwds').required = false;
+                document.getElementById('pwds').placeholder = '若不修改則留空';
+            }
+        }
+
+        modal.classList.add('show');
+    }
+
+    function closeModal() {
+        document.getElementById('userModal').classList.remove('show');
+    }
+
+    async function saveUser(e) {
+        e.preventDefault();
+        const id = document.getElementById('user-id').value;
+        const acct_no = document.getElementById('acct_no').value;
+        const acct_name = document.getElementById('acct_name').value;
+        const pwds = document.getElementById('pwds').value;
+        const role = document.getElementById('role').value;
+
+        const url = id ? '/api/users/update' : '/api/users/add';
+        const payload = { acct_no, acct_name, role };
+        if (id) payload.id = id;
+        if (pwds) payload.pwds = pwds;
+
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            if (result.success) {
+                closeModal();
+                fetchUsers();
+            } else {
+                alert('儲存失敗: ' + result.error);
+            }
+        } catch (err) {
+            alert('網路錯誤: ' + err);
+        }
+    }
+
+    async function deleteUser(id) {
+        if (!confirm('確定要刪除此使用者嗎？')) return;
+
+        try {
+            const res = await fetch('/api/users/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const result = await res.json();
+            if (result.success) {
+                fetchUsers();
+            } else {
+                alert('刪除失敗: ' + result.error);
+            }
+        } catch (err) {
+            alert('網路錯誤: ' + err);
+        }
+    }
+</script>
+{% endblock %}

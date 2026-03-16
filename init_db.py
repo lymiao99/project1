@@ -24,7 +24,10 @@ def init_user_info():
         pwds TEXT NOT NULL,
         acct_name TEXT,
         role TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT,
+        last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        last_updated_by TEXT
     );
     """
     

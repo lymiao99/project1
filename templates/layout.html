@@ -27,22 +27,25 @@
         <nav>
             <div class="logo">AI Predictive Maintenance</div>
             <div class="nav-links">
-                {% if session.get('user') in ['admin001', 'tl001'] %}
+                {% set user_role = session.get('user_info', {}).get('role') %}
+                
+                {% if user_role in ['ADMIN', 'TEAM_LEADER'] %}
                 <a href="/" id="nav-home">即時監測</a>
                 <a href="/predict-manual" id="nav-manual">單次預測</a>
+                {% endif %}
+                
+                {% if user_role in ['ADMIN', 'TEAM_LEADER', 'MANAGER'] %}
                 <a href="/maintenance-error" id="nav-error">異常記錄處理</a>
                 {% endif %}
                 
-                {% if session.get('user') in ['admin001', 'mgr001'] %}
+                {% if user_role in ['ADMIN', 'MANAGER'] %}
                 <a href="/dashboard" id="nav-dash">數據儀表板</a>
-                {% endif %}
-                
-                {% if session.get('user') in ['admin001', 'tl001'] %}
                 <a href="/training-results" id="nav-train">訓練結果</a>
+                <a href="/risk-assessment" id="nav-risk">風險預算</a>
                 {% endif %}
                 
-                {% if session.get('user') in ['admin001', 'mgr001'] %}
-                <a href="/risk-assessment" id="nav-risk">風險預算</a>
+                {% if user_role == 'ADMIN' %}
+                <a href="/user-management" id="nav-user">使用者管理</a>
                 {% endif %}
             </div>
         </nav>
@@ -59,6 +62,7 @@
         if (path === '/dashboard') document.getElementById('nav-dash')?.classList.add('active');
         if (path === '/training-results') document.getElementById('nav-train')?.classList.add('active');
         if (path === '/risk-assessment') document.getElementById('nav-risk')?.classList.add('active');
+        if (path === '/user-management') document.getElementById('nav-user')?.classList.add('active');
     </script>
 </body>
 
