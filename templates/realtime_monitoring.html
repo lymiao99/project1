@@ -23,7 +23,7 @@
     <!-- 即時指標 -->
     <div class="metrics-grid">
         <div class="metric-card">
-            <div class="metric-label">空氣溫度</div>
+            <div class="metric-label">環境溫度</div>
             <div id="val-air-temp" class="metric-value">--</div>
             <div id="val-air-temp-avg" class="metric-sub">MA(5)：--</div>
         </div>
@@ -65,7 +65,7 @@
             <div class="chart-head">
                 <div>
                     <div class="panel-title">溫度趨勢監測</div>
-                    <div class="panel-desc">空氣溫度、製程溫度與移動平均</div>
+                    <div class="panel-desc">環境溫度、製程溫度與移動平均</div>
                 </div>
             </div>
             <div class="chart-container large">
@@ -91,7 +91,7 @@
         <div class="panel">
             <div class="panel-title">監測判斷規則</div>
             <div class="info-list">
-                <div class="info-item">溫度警戒線：空氣溫度 305 K、製程溫度 315 K</div>
+                <div class="info-item">溫度警戒線：環境溫度 305 K、製程溫度 315 K</div>
                 <div class="info-item">震盪警戒線：轉速震盪值 12</div>
                 <div class="info-item">健康分數依溫度、震盪、磨耗與模型結果綜合估算</div>
             </div>
@@ -806,7 +806,7 @@
             labels: labels,
             datasets: [
                 {
-                    label: '空氣溫度',
+                    label: '環境溫度',
                     data: airTempData,
                     borderColor: '#60a5fa',
                     backgroundColor: 'rgba(96,165,250,0.15)',
@@ -833,7 +833,7 @@
                     pointRadius: 0
                 },
                 {
-                    label: '空氣溫度警戒線',
+                    label: '環境溫度警戒線',
                     data: [],
                     borderColor: '#f59e0b',
                     borderWidth: 1.5,
@@ -948,7 +948,7 @@
             badge.classList.add('status-danger');
             badge.innerText = '設備異常';
             predictionHint.innerText = '建議立即人工檢查';
-            advice.innerText = '請優先確認空氣溫度、製程溫度、主軸轉速與工具磨損是否偏離正常範圍，必要時請停機處理。';
+            advice.innerText = '請優先確認環境溫度、製程溫度、主軸轉速與工具磨損是否偏離正常範圍，必要時請停機處理。';
             modeText.className = 'mode-danger';
             modeText.innerText = '異常事件處理中';
         } else {
@@ -1004,7 +1004,7 @@
         const fieldLabels = {
             udi: '設備識別碼 (UDI)',
             type: '設備類型',
-            air_temp: '空氣溫度',
+            air_temp: '環境溫度',
             process_temp: '製程溫度',
             rot_speed: '主軸轉速',
             torque: '扭力',
