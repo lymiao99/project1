@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+﻿from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import joblib
 import json
 import pandas as pd
@@ -136,7 +136,7 @@ def sensor_stream():
             params = {}
         else:
             # Fetch the next row
-            query = text(f"SELECT * FROM {TABLE_NAME} a WHERE udi > :last_udi and not exists (select 1 from public.maintenance_error b where a.udi=b.udi) ORDER BY udi ASC LIMIT 1")
+            query = text(f"SELECT * FROM {TABLE_NAME} a WHERE udi > 10000 and udi > :last_udi and not exists (select 1 from public.maintenance_error b where a.udi=b.udi) ORDER BY udi ASC LIMIT 1")
             params = {"last_udi": last_udi}
 
         with engine.connect() as conn:
@@ -668,19 +668,17 @@ def update_maintenance_error():
 def api_dashboard_advanced():
     """Advanced dashboard API."""
     try:
-        # 區塊 1. Top 故障設備 (依故障次數 排序)
-        top_fail_query = f"""
-            SELECT udi, type, SUM(machine_failure) as failures
+        # 區塊 1. 設備類型故障比例 (H/M/L)
+        type_fail_query = f"""
+            SELECT type, SUM(machine_failure) as failures
             FROM {TABLE_NAME}
-            GROUP BY udi, type
-            HAVING SUM(machine_failure) > 0
-            ORDER BY failures DESC
-            LIMIT 10
+            WHERE machine_failure = 1
+            GROUP BY type
         """
-        top_fail_df = pd.read_sql(top_fail_query, engine)
-        top_failure_devices = [
-            {'udi': int(r['udi']), 'type': r['type'], 'failures': int(r['failures'])}
-            for _, r in top_fail_df.iterrows()
+        type_fail_df = pd.read_sql(type_fail_query, engine)
+        type_failure_ratios = [
+            {'type': r['type'], 'count': int(r['failures'])}
+            for _, r in type_fail_df.iterrows()
         ]
 
         # 區塊 2. 異常設備 () 清單
@@ -708,16 +706,24 @@ def api_dashboard_advanced():
             ORDER BY udi
             LIMIT 30
         """
+        # 區塊 2. 異常設備列表 & 原因比例
         anomaly_df = pd.read_sql(anomaly_query, engine)
         anomaly_devices = []
+        reason_counts = {}
+        
         for _, r in anomaly_df.iterrows():
             reasons = []
             spd = float(r['rotational_speed_rpm'])
             trq = float(r['torque_nm'])
             if spd > mean_speed + 2 * std_speed or spd < mean_speed - 2 * std_speed:
-                reasons.append('Speed anomaly')
+                reason = '轉速異常'
+                reasons.append(reason)
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
             if trq > mean_torque + 2 * std_torque or trq < mean_torque - 2 * std_torque:
-                reasons.append('扭矩異常')
+                reason = '扭矩異常'
+                reasons.append(reason)
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+                
             anomaly_devices.append({
                 'udi': int(r['udi']),
                 'type': r['type'],
@@ -726,6 +732,10 @@ def api_dashboard_advanced():
                 'tool_wear': round(float(r['tool_wear_min']), 1),
                 'reason': ' / '.join(reasons)
             })
+            
+        anomaly_reason_stats = [
+            {'reason': k, 'count': v} for k, v in reason_counts.items()
+        ]
 
         # 區塊 3. 預測性故障 (高磨耗 設備)
         predict_normal = 0
@@ -805,8 +815,9 @@ def api_dashboard_advanced():
         }
 
         return jsonify({
-            'top_failure_devices': top_failure_devices,
+            'type_failure_ratios': type_failure_ratios,
             'anomaly_devices': anomaly_devices,
+            'anomaly_reason_stats': anomaly_reason_stats,
             'predictive_failures': {
                 'predicted_fail': predict_failure,
                 'predicted_normal': predict_normal
