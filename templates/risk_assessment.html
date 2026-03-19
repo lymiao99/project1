@@ -46,6 +46,8 @@
 </div>
 
 <script>
+    let riskChart = null;
+
     async function loadRiskData() {
         const response = await fetch('/api/stats');
         const data = await response.json();
@@ -55,34 +57,47 @@
         document.getElementById('avgToolWear').innerText = data.avg_tool_wear + ' min';
         document.getElementById('recommendedBudget').innerText = '$' + data.recommended_budget.toLocaleString();
 
-        const ctx = document.getElementById('riskTrendChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: Array.from({ length: data.trend_data.length }, (_, i) => `樣本 ${i + 1}`),
-                datasets: [{
-                    label: '機器轉速 [rpm]',
-                    data: data.trend_data,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { grid: { color: 'rgba(255,255,255,0.1)' } },
-                    x: { display: false }
+        const labels = Array.from({ length: data.trend_data.length }, (_, i) => `樣本 ${i + 1}`);
+
+        if (riskChart) {
+            // 更新現有圖表數據
+            riskChart.data.labels = labels;
+            riskChart.data.datasets[0].data = data.trend_data;
+            riskChart.update('none'); // 使用 'none' 模式避免頻繁動畫造成閃爍
+        } else {
+            // 初次建立圖表
+            const ctx = document.getElementById('riskTrendChart').getContext('2d');
+            riskChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '機器轉速 [rpm]',
+                        data: data.trend_data,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
                 },
-                plugins: {
-                    legend: { labels: { color: '#f8fafc' } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.1)' } },
+                        x: { display: false }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#f8fafc' } }
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
+    // 初次載入
     loadRiskData();
+    // 每 3 秒自動更新一次數據
+    setInterval(loadRiskData, 3000);
 </script>
 {% endblock %}

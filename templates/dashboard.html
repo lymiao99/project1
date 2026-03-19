@@ -121,248 +121,293 @@
         muted: '#94a3b8'
     };
 
+    // 宣告全局變數以保存圖表實例
+    let typeChart = null;
+    let trendChart = null;
+    let predictChart = null;
+    let impactChart = null;
+    let trendCompareChart = null;
+    let anomalyReasonChart = null;
+
     async function initDashboard() {
-        const response = await fetch('/api/stats');
-        const data = await response.json();
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
 
-        if (data.error) {
-            alert('數據載入失敗: ' + data.error);
-            return;
+            if (data.error) {
+                console.error('數據載入失敗: ' + data.error);
+                return;
+            }
+
+            // 更新數值指標
+            document.getElementById('stat_total').innerText = data.total_records.toLocaleString();
+            document.getElementById('stat_failure').innerText = data.failure_count;
+            document.getElementById('stat_rate').innerText = data.failure_rate + '%';
+            document.getElementById('stat_temp').innerText = data.avg_air_temp + ' K';
+
+            // --- 1. 設備類型比例 (Doughnut) ---
+            const typeLabels = Object.keys(data.type_stats);
+            const typeValues = Object.values(data.type_stats);
+            if (typeChart) {
+                typeChart.data.labels = typeLabels;
+                typeChart.data.datasets[0].data = typeValues;
+                typeChart.update('none');
+            } else {
+                typeChart = new Chart(document.getElementById('typeChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: typeLabels,
+                        datasets: [{
+                            data: typeValues,
+                            backgroundColor: [advColors.indigo, advColors.emerald, advColors.amber],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: advColors.muted } } }
+                    }
+                });
+            }
+
+            // --- 2. 即時轉速趨勢 (Line) ---
+            const trendLabels = data.trend_data.map((_, i) => i + 1);
+            if (trendChart) {
+                trendChart.data.labels = trendLabels;
+                trendChart.data.datasets[0].data = data.trend_data;
+                trendChart.update('none');
+            } else {
+                trendChart = new Chart(document.getElementById('trendChart'), {
+                    type: 'line',
+                    data: {
+                        labels: trendLabels,
+                        datasets: [{
+                            label: '轉速 [rpm]',
+                            data: data.trend_data,
+                            borderColor: advColors.indigo,
+                            tension: 0.4,
+                            fill: true,
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: advColors.muted } },
+                            y: { ticks: { color: advColors.muted } }
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error(e);
         }
-
-        document.getElementById('stat_total').innerText = data.total_records.toLocaleString();
-        document.getElementById('stat_failure').innerText = data.failure_count;
-        document.getElementById('stat_rate').innerText = data.failure_rate;
-        document.getElementById('stat_temp').innerText = data.avg_air_temp + ' K';
-
-        new Chart(document.getElementById('typeChart'), {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(data.type_stats),
-                datasets: [{
-                    data: Object.values(data.type_stats),
-                    backgroundColor: [advColors.indigo, advColors.emerald, advColors.amber],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: advColors.muted } } }
-            }
-        });
-
-        new Chart(document.getElementById('trendChart'), {
-            type: 'line',
-            data: {
-                labels: data.trend_data.map((_, i) => i + 1),
-                datasets: [{
-                    label: '轉速 [rpm]',
-                    data: data.trend_data,
-                    borderColor: advColors.indigo,
-                    tension: 0.4,
-                    fill: true,
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { ticks: { color: advColors.muted } },
-                    y: { ticks: { color: advColors.muted } }
-                }
-            }
-        });
     }
 
     async function initAdvanced() {
-        const response = await fetch('/api/dashboard-advanced');
-        const d = await response.json();
-        if (d.error) { console.error(d.error); return; }
+        try {
+            const response = await fetch('/api/dashboard-advanced');
+            const d = await response.json();
+            if (d.error) { console.error(d.error); return; }
 
-        // ── 1. 設備類型故障比例 (圓餅圖) ──
-        const typeFailLabels = d.type_failure_ratios.map(x => `類型 ${x.type}`);
-        const typeFailValues = d.type_failure_ratios.map(x => x.count);
-        new Chart(document.getElementById('typeFailRatioChart'), {
-            type: 'pie',
-            data: {
-                labels: typeFailLabels,
-                datasets: [{
-                    data: typeFailValues,
-                    backgroundColor: [advColors.rose, advColors.amber, advColors.sky],
-                    borderWidth: 1,
-                    borderColor: 'rgba(0,0,0,0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { 
-                        position: 'right',
-                        labels: { color: advColors.muted }
-                    } 
-                }
-            }
-        });
-
-        // ── 2. 預測故障 (圓環圖) ──
-        const pf = d.predictive_failures;
-        document.getElementById('predictFail').innerText = pf.predicted_fail;
-        document.getElementById('predictNormal').innerText = pf.predicted_normal;
-        document.getElementById('predictTotal').innerText = pf.predicted_fail + pf.predicted_normal;
-        new Chart(document.getElementById('predictChart'), {
-            type: 'doughnut',
-            data: {
-                labels: ['預測故障', '預測正常'],
-                datasets: [{
-                    data: [pf.predicted_fail, pf.predicted_normal],
-                    backgroundColor: ['rgba(244, 63, 94, 0.8)', 'rgba(16, 185, 129, 0.8)'],
-                    borderWidth: 0,
-                    cutout: '70%'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                }
-            }
-        });
-
-        // ── 3. 停機影響 (堆疊長條圖) ──
-        const impactLabels = d.downtime_impact.map(x => `類型 ${x.type}`);
-        new Chart(document.getElementById('impactChart'), {
-            type: 'bar',
-            data: {
-                labels: impactLabels,
-                datasets: [
-                    {
-                        label: '故障次數',
-                        data: d.downtime_impact.map(x => x.failures),
-                        backgroundColor: 'rgba(244, 63, 94, 0.7)',
-                        borderRadius: 4,
-                        yAxisID: 'y'
+            // --- 1. 預測故障 (Doughnut) ---
+            const pf = d.predictive_failures;
+            document.getElementById('predictFail').innerText = pf.predicted_fail;
+            document.getElementById('predictNormal').innerText = pf.predicted_normal;
+            document.getElementById('predictTotal').innerText = pf.predicted_fail + pf.predicted_normal;
+            
+            if (predictChart) {
+                predictChart.data.datasets[0].data = [pf.predicted_fail, pf.predicted_normal];
+                predictChart.update('none');
+            } else {
+                predictChart = new Chart(document.getElementById('predictChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['預測故障', '預測正常'],
+                        datasets: [{
+                            data: [pf.predicted_fail, pf.predicted_normal],
+                            backgroundColor: ['rgba(244, 63, 94, 0.8)', 'rgba(16, 185, 129, 0.8)'],
+                            borderWidth: 0,
+                            cutout: '70%'
+                        }]
                     },
-                    {
-                        label: '預估成本 ($)',
-                        data: d.downtime_impact.map(x => x.est_cost),
-                        backgroundColor: 'rgba(245, 158, 11, 0.7)',
-                        borderRadius: 4,
-                        yAxisID: 'y1'
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } }
                     }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: advColors.muted } } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: advColors.muted } },
-                    y: {
-                        position: 'left',
-                        title: { display: true, text: '故障數', color: advColors.muted },
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: advColors.muted }
+                });
+            }
+
+            // --- 2. 停機影響 (Bar) ---
+            const impactLabels = d.downtime_impact.map(x => `類型 ${x.type}`);
+            const failData = d.downtime_impact.map(x => x.failures);
+            const costData = d.downtime_impact.map(x => x.est_cost);
+
+            if (impactChart) {
+                impactChart.data.labels = impactLabels;
+                impactChart.data.datasets[0].data = failData;
+                impactChart.data.datasets[1].data = costData;
+                impactChart.update('none');
+            } else {
+                impactChart = new Chart(document.getElementById('impactChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: impactLabels,
+                        datasets: [
+                            {
+                                label: '故障次數',
+                                data: failData,
+                                backgroundColor: 'rgba(244, 63, 94, 0.7)',
+                                borderRadius: 4,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: '預估成本 ($)',
+                                data: costData,
+                                backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                                borderRadius: 4,
+                                yAxisID: 'y1'
+                            }
+                        ]
                     },
-                    y1: {
-                        position: 'right',
-                        title: { display: true, text: '成本 ($)', color: advColors.muted },
-                        grid: { display: false },
-                        ticks: { color: advColors.amber }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: advColors.muted } } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: advColors.muted } },
+                            y: {
+                                position: 'left',
+                                title: { display: true, text: '故障數', color: advColors.muted },
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: advColors.muted }
+                            },
+                            y1: {
+                                position: 'right',
+                                title: { display: true, text: '成本 ($)', color: advColors.muted },
+                                grid: { display: false },
+                                ticks: { color: advColors.amber }
+                            }
+                        }
                     }
-                }
+                });
             }
-        });
 
-        // ── 4. 趨勢比較 (雙折線圖) ──
-        const tc = d.trend_comparison;
-        new Chart(document.getElementById('trendCompareChart'), {
-            type: 'line',
-            data: {
-                labels: tc.labels,
-                datasets: [
-                    {
-                        label: '前半期故障率 (%)',
-                        data: tc.first_half,
-                        borderColor: advColors.sky,
-                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointBackgroundColor: advColors.sky
+            // --- 3. 趨勢比較 (Line) ---
+            const tc = d.trend_comparison;
+            if (trendCompareChart) {
+                trendCompareChart.data.datasets[0].data = tc.first_half;
+                trendCompareChart.data.datasets[1].data = tc.second_half;
+                trendCompareChart.update('none');
+            } else {
+                trendCompareChart = new Chart(document.getElementById('trendCompareChart'), {
+                    type: 'line',
+                    data: {
+                        labels: tc.labels,
+                        datasets: [
+                            {
+                                label: '前半期故障率 (%)',
+                                data: tc.first_half,
+                                borderColor: advColors.sky,
+                                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 5,
+                                pointBackgroundColor: advColors.sky
+                            },
+                            {
+                                label: '後半期故障率 (%)',
+                                data: tc.second_half,
+                                borderColor: advColors.rose,
+                                backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 5,
+                                pointBackgroundColor: advColors.rose
+                            }
+                        ]
                     },
-                    {
-                        label: '後半期故障率 (%)',
-                        data: tc.second_half,
-                        borderColor: advColors.rose,
-                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointBackgroundColor: advColors.rose
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: advColors.muted } } },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: advColors.muted } },
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: advColors.muted, callback: v => v + '%' }
+                            }
+                        }
                     }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: advColors.muted } } },
-                scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: advColors.muted } },
-                    y: {
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: advColors.muted, callback: v => v + '%' }
+                });
+            }
+
+            // --- 4. 異常原因分析 (Doughnut) ---
+            const reasonLabels = d.anomaly_reason_stats.map(x => x.reason);
+            const reasonValues = d.anomaly_reason_stats.map(x => x.count);
+            if (anomalyReasonChart) {
+                anomalyReasonChart.data.labels = reasonLabels;
+                anomalyReasonChart.data.datasets[0].data = reasonValues;
+                anomalyReasonChart.update('none');
+            } else {
+                anomalyReasonChart = new Chart(document.getElementById('anomalyReasonChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: reasonLabels,
+                        datasets: [{
+                            data: reasonValues,
+                            backgroundColor: [advColors.violet, advColors.emerald],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { color: advColors.muted, boxWidth: 12 } }
+                        },
+                        cutout: '60%'
                     }
-                }
+                });
             }
-        });
 
-        // ── 5. 異常原因分析 (半圓環圖) ──
-        const reasonLabels = d.anomaly_reason_stats.map(x => x.reason);
-        const reasonValues = d.anomaly_reason_stats.map(x => x.count);
-        new Chart(document.getElementById('anomalyReasonChart'), {
-            type: 'doughnut',
-            data: {
-                labels: reasonLabels,
-                datasets: [{
-                    data: reasonValues,
-                    backgroundColor: [advColors.violet, advColors.emerald],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { color: advColors.muted, boxWidth: 12 } }
-                },
-                cutout: '60%'
+            // --- 5. 異常設備列表 (Table) ---
+            const tbody = document.getElementById('anomalyBody');
+            if (d.anomaly_devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--accent);">✅ 所有設備運行正常</td></tr>';
+            } else {
+                tbody.innerHTML = d.anomaly_devices.map(dev => `
+                    <tr>
+                        <td><strong>${dev.udi}</strong></td>
+                        <td><span class="type-badge type-${dev.type}">${dev.type}</span></td>
+                        <td>${dev.speed}</td>
+                        <td>${dev.torque}</td>
+                        <td>${dev.tool_wear}</td>
+                        <td><span class="anomaly-tag">${dev.reason}</span></td>
+                    </tr>
+                `).join('');
             }
-        });
-
-        // ── 6. 異常設備列表 (表格) ──
-        const tbody = document.getElementById('anomalyBody');
-        if (d.anomaly_devices.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--accent);">✅ 所有設備運行正常</td></tr>';
-        } else {
-            tbody.innerHTML = d.anomaly_devices.map(dev => `
-                <tr>
-                    <td><strong>${dev.udi}</strong></td>
-                    <td><span class="type-badge type-${dev.type}">${dev.type}</span></td>
-                    <td>${dev.speed}</td>
-                    <td>${dev.torque}</td>
-                    <td>${dev.tool_wear}</td>
-                    <td><span class="anomaly-tag">${dev.reason}</span></td>
-                </tr>
-            `).join('');
+        } catch (e) {
+            console.error(e);
         }
     }
 
-    initDashboard();
-    initAdvanced();
+    // 初始化並啟動定時刷新
+    function startAutoRefresh() {
+        initDashboard();
+        initAdvanced();
+        
+        // 每 5 秒自動更新一次
+        setInterval(() => {
+            initDashboard();
+            initAdvanced();
+        }, 5000);
+    }
+
+    startAutoRefresh();
 </script>
 {% endblock %}
