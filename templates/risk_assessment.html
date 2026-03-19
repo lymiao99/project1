@@ -20,7 +20,7 @@
         </div>
         <div class="stat-card">
             <div class="stat-label">建議維護預算 (月)</div>
-            <div class="stat-value">$12,500</div>
+            <div id="recommendedBudget" class="stat-value">載入中...</div>
         </div>
     </div>
 
@@ -53,6 +53,7 @@
         document.getElementById('anomalyCount').innerText = data.anomalies;
         document.getElementById('globalFailureRate').innerText = data.failure_rate + '%';
         document.getElementById('avgToolWear').innerText = data.avg_tool_wear + ' min';
+        document.getElementById('recommendedBudget').innerText = '$' + data.recommended_budget.toLocaleString();
 
         const ctx = document.getElementById('riskTrendChart').getContext('2d');
         new Chart(ctx, {

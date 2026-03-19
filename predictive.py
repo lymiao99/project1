@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import joblib
 import json
 import pandas as pd
@@ -871,6 +871,11 @@ def api_stats():
         """
         anomalies = int(pd.read_sql(anomaly_query, engine).iloc[0, 0])
 
+        # 5. 建議維護預算 (動態計算)
+        # 公式: 基礎 $5,000 + (異常數 * $200) + (平均磨損 * $15)
+        avg_wear = row['avg_tool_wear'] if row['avg_tool_wear'] else 0
+        recommended_budget = 5000 + (anomalies * 200) + (avg_wear * 15)
+
         stats = {
             'total_records': total_records,
             'failure_count': failure_count,
@@ -880,7 +885,8 @@ def api_stats():
             'avg_torque': round(row['avg_torque'] if row['avg_torque'] else 0, 2),
             'trend_data': trend_data,
             'anomalies': anomalies,
-            'avg_tool_wear': round(row['avg_tool_wear'] if row['avg_tool_wear'] else 0, 2)
+            'avg_tool_wear': round(avg_wear, 2),
+            'recommended_budget': int(recommended_budget)
         }
         return jsonify(stats)
     except Exception as e:
